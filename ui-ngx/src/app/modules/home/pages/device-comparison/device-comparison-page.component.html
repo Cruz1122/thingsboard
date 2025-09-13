@@ -20,7 +20,7 @@
   <div class="mat-padding">
     
     <!-- Header Section -->
-    <div class="tb-details-buttons xs:flex xs:flex-col">
+    <div class="device-comparison-header">
       <div class="header-content">
         <div class="title-section">
           <h2 class="page-title" translate>device-comparison.device-comparison</h2>
@@ -36,8 +36,7 @@
             <span translate>action.refresh</span>
           </button>
           
-          <button mat-raised-button
-                  color="primary"
+          <button mat-stroked-button
                   (click)="onExportData()"
                   [disabled]="!filteredData.length">
             <mat-icon>download</mat-icon>
@@ -149,35 +148,33 @@
     </mat-expansion-panel>
 
     <!-- Filters Section -->
-    <div class="tb-details-buttons xs:flex xs:flex-col">
-      <div class="filters-section">
-        <mat-form-field appearance="outline" class="search-field">
-          <mat-label translate>action.search</mat-label>
-          <input matInput 
-                 [(ngModel)]="searchText"
-                 (ngModelChange)="onSearchChange($event)"
-                 placeholder="{{ 'device-comparison.search-placeholder' | translate }}">
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
-        
-        <mat-form-field appearance="outline" class="filter-field">
-          <mat-label translate>device-comparison.device-type</mat-label>
-          <mat-select [(ngModel)]="selectedDeviceType"
-                      (ngModelChange)="onDeviceTypeChange($event)">
-            <mat-option value="">
-              {{ 'device-comparison.all-types' | translate }}
-            </mat-option>
-            <mat-option *ngFor="let type of getDeviceTypes()" [value]="type">
-              {{ type }}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
-        
-        <div class="results-count">
-          <span class="count-text">
-            {{ filteredData.length }} {{ 'device-comparison.devices-found' | translate }}
-          </span>
-        </div>
+    <div class="filters-section">
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-label translate>action.search</mat-label>
+        <input matInput 
+               [(ngModel)]="searchText"
+               (ngModelChange)="onSearchChange($event)"
+               placeholder="{{ 'device-comparison.search-placeholder' | translate }}">
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+      
+      <mat-form-field appearance="outline" class="filter-field">
+        <mat-label translate>device-comparison.device-type</mat-label>
+        <mat-select [(ngModel)]="selectedDeviceType"
+                    (ngModelChange)="onDeviceTypeChange($event)">
+          <mat-option value="">
+            {{ 'device-comparison.all-types' | translate }}
+          </mat-option>
+          <mat-option *ngFor="let type of getDeviceTypes()" [value]="type">
+            {{ type }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+      
+      <div class="results-count">
+        <span class="count-text">
+          {{ filteredData.length }} {{ 'device-comparison.devices-found' | translate }}
+        </span>
       </div>
     </div>
 
@@ -200,9 +197,9 @@
           
           <mat-card-header>
             <div mat-card-avatar class="device-avatar">
-              <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
-                                      getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
-                {{ getDeviceIcon(device) }}
+              <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#f44336' : 
+                                      getStatusColor(device) === 'accent' ? '#ff9800' : '#4caf50'">
+                {{ device.isOnline ? 'device_hub' : 'portable_wifi_off' }}
               </mat-icon>
             </div>
             
@@ -212,10 +209,8 @@
             </mat-card-subtitle>
             
             <div class="card-actions">
-              <mat-chip *ngIf="settings.enableRanking" 
-                        class="rank-chip"
-                        [style.background-color]="device.rank <= 3 ? '#305680' : 
-                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+              <mat-chip *ngIf="settings.enableRanking" class="rank-chip" [style.background-color]="device.rank <= 3 ? '#305680' : 
+                                                                          device.rank <= 10 ? '#527dad' : '#a7c1de'">
                 #{{ device.rank }}
               </mat-chip>
               
@@ -233,7 +228,7 @@
                    class="metric-item">
                 <div class="metric-label">{{ metric.label }}</div>
                 <div class="metric-value">
-                  {{ device.metrics[metric.key] | number:'1.2-2' }}
+                  {{ device.metrics[metric.key] | number:'1.1-1' }}
                   <span class="metric-unit">{{ metric.unit }}</span>
                 </div>
                 
@@ -260,7 +255,7 @@
           </mat-card-content>
           
           <mat-card-actions align="end">
-            <button mat-button color="primary" (click)="onDeviceDetails(device)">
+            <button mat-button color="primary">
               {{ 'common.details' | translate }}
             </button>
           </mat-card-actions>
@@ -277,9 +272,9 @@
                          [class.offline]="!device.isOnline">
             
             <mat-icon matListIcon 
-                      [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
-                                     getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
-              {{ getDeviceIcon(device) }}
+                      [style.color]="getStatusColor(device) === 'warn' ? '#f44336' : 
+                                     getStatusColor(device) === 'accent' ? '#ff9800' : '#4caf50'">
+              {{ device.isOnline ? 'device_hub' : 'portable_wifi_off' }}
             </mat-icon>
             
             <div matLine class="device-info">
@@ -288,8 +283,8 @@
               
               <mat-chip *ngIf="settings.enableRanking" 
                         class="rank-chip-small"
-                        [style.background-color]="device.rank <= 3 ? '#305680' : 
-                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+                        [style.background-color]="device.rank <= 3 ? '#4caf50' : 
+                                                  device.rank <= 10 ? '#ff9800' : '#757575'">
                 #{{ device.rank }}
               </mat-chip>
             </div>
@@ -297,7 +292,7 @@
             <div matLine class="metrics-inline">
               <span *ngFor="let metric of settings.metrics.slice(0, 3); let last = last"
                     class="metric-inline">
-                {{ metric.label }}: {{ device.metrics[metric.key] | number:'1.2-2' }}{{ metric.unit }}
+                {{ metric.label }}: {{ device.metrics[metric.key] | number:'1.1-1' }}{{ metric.unit }}
                 <span *ngIf="!last"> • </span>
               </span>
             </div>
@@ -328,8 +323,8 @@
             <th mat-header-cell *matHeaderCellDef translate>device-comparison.rank</th>
             <td mat-cell *matCellDef="let device">
               <mat-chip class="rank-chip-table"
-                        [style.background-color]="device.rank <= 3 ? '#305680' : 
-                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+                        [style.background-color]="device.rank <= 3 ? '#4caf50' : 
+                                                  device.rank <= 10 ? '#ff9800' : '#757575'">
                 #{{ device.rank }}
               </mat-chip>
             </td>
@@ -339,9 +334,9 @@
             <th mat-header-cell *matHeaderCellDef translate>device-comparison.device</th>
             <td mat-cell *matCellDef="let device">
               <div class="device-cell">
-                <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
-                                         getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
-                  {{ getDeviceIcon(device) }}
+                <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#f44336' : 
+                                         getStatusColor(device) === 'accent' ? '#ff9800' : '#4caf50'">
+                  {{ device.isOnline ? 'device_hub' : 'portable_wifi_off' }}
                 </mat-icon>
                 <div class="device-info">
                   <div class="device-name">{{ device.deviceName }}</div>
@@ -362,7 +357,7 @@
             <td mat-cell *matCellDef="let device">
               <div class="metric-cell">
                 <span class="metric-value">
-                  {{ device.metrics[metric.key] | number:'1.2-2' }}{{ metric.unit }}
+                  {{ device.metrics[metric.key] | number:'1.1-1' }}{{ metric.unit }}
                 </span>
                 <mat-progress-bar 
                   mode="determinate"

@@ -1,0 +1,83 @@
+<h2 mat-dialog-title translate>common.configuration</h2>
+
+<div mat-dialog-content>
+  <form [formGroup]="form" class="config-form">
+    <div class="config-row">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label translate>device-comparison.max-devices</mat-label>
+        <input matInput type="number" formControlName="maxDevices" min="1" max="50">
+      </mat-form-field>
+    </div>
+
+    <div class="config-row">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label translate>device-comparison.layout</mat-label>
+        <mat-select formControlName="layout">
+          <mat-option [value]="ComparisonLayout.grid">{{ 'device-comparison.layout-grid' | translate }}</mat-option>
+          <mat-option [value]="ComparisonLayout.list">{{ 'device-comparison.layout-list' | translate }}</mat-option>
+          <mat-option [value]="ComparisonLayout.table">{{ 'device-comparison.layout-table' | translate }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="config-row">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label translate>device-comparison.refresh-interval</mat-label>
+        <input matInput type="number" formControlName="refreshInterval" min="1">
+        <span matSuffix>sec</span>
+      </mat-form-field>
+    </div>
+
+    <div class="config-row">
+      <mat-checkbox formControlName="enableRanking">{{ 'device-comparison.enable-ranking' | translate }}</mat-checkbox>
+    </div>
+
+    <div class="config-row" *ngIf="form.get('enableRanking')?.value">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label translate>device-comparison.ranking-criteria</mat-label>
+        <mat-select formControlName="rankingCriteria">
+          <mat-option [value]="RankingCriteria.performance">{{ 'device-comparison.ranking-performance' | translate }}</mat-option>
+          <mat-option [value]="RankingCriteria.uptime">{{ 'device-comparison.ranking-uptime' | translate }}</mat-option>
+          <mat-option [value]="RankingCriteria.custom">{{ 'device-comparison.ranking-custom' | translate }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+      <div class="config-row" *ngIf="form.get('enableRanking')?.value">
+        <ng-container *ngIf="form.get('rankingCriteria')?.value === RankingCriteria.custom">
+          <mat-form-field appearance="fill" class="formula-field">
+            <mat-label>Fórmula personalizada</mat-label>
+            <textarea matInput rows="3" formControlName="customRankingFormula"
+                      placeholder="battery*0.4 + signal*0.6"></textarea>
+            <mat-hint align="start">
+              Usa claves de métricas (p. ej., temperature, humidity, battery) con +, -, *, / y paréntesis.
+            </mat-hint>
+            <mat-error *ngIf="form.get('customRankingFormula')?.hasError('pattern')">
+              La fórmula contiene caracteres no permitidos
+            </mat-error>
+          </mat-form-field>
+        </ng-container>
+      </div>
+
+    <div class="config-row">
+      <mat-checkbox formControlName="enableOutlierDetection">{{ 'device-comparison.enable-outlier-detection' | translate }}</mat-checkbox>
+    </div>
+
+    <div class="config-row" *ngIf="form.get('enableOutlierDetection')?.value">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label translate>device-comparison.outlier-threshold</mat-label>
+        <input matInput type="number" formControlName="outlierThreshold" step="0.1" min="0.1" max="5.0">
+        <span matSuffix>σ</span>
+      </mat-form-field>
+    </div>
+
+    <div class="config-row">
+      <mat-checkbox formControlName="enableOfflineAlerts">{{ 'device-comparison.enable-offline-alerts' | translate }}</mat-checkbox>
+    </div>
+  </form>
+</div>
+
+<div mat-dialog-actions class="dialog-actions-end">
+  <button mat-button (click)="cancel()">{{ 'action.cancel' | translate }}</button>
+  <button mat-flat-button color="primary" (click)="apply()">{{ 'action.update' | translate }}</button>
+  
+</div>

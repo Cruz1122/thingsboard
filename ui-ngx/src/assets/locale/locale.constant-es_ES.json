@@ -84,6 +84,7 @@
     "delete-selected": "Eliminar seleccionados",
     "set": "Establecer"
   },
+  
   "aggregation": {
     "aggregation": "Agregación",
     "function": "Función de agregación de datos",
@@ -7097,7 +7098,7 @@
     "ranking-criteria": "Criterio de ranking",
     "ranking-performance": "Rendimiento",
     "ranking-uptime": "Tiempo de actividad",
-    "ranking-custom": "Personalizado",
+  "ranking-custom": "Personalizado",
     "enable-outlier-detection": "Detectar valores atípicos",
     "outlier-threshold": "Umbral de valores atípicos",
     "outlier-threshold-placeholder": "Desviaciones estándar para considerar atípico",

@@ -1,0 +1,34 @@
+<h2 mat-dialog-title>Filtros</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="filters-form">
+    <div class="row">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label>Estado</mat-label>
+        <mat-select formControlName="online">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option [value]="true">En línea</mat-option>
+          <mat-option [value]="false">Desconectado</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+    <div class="row">
+      <mat-form-field appearance="fill" class="w-100">
+        <mat-label>Tipo de dispositivo</mat-label>
+        <mat-select formControlName="deviceType">
+          <mat-option value="">Todos los tipos</mat-option>
+          <mat-option *ngFor="let type of data.deviceTypes" [value]="type">{{ type }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+    <div class="row checkers">
+      <mat-checkbox formControlName="outliersOnly">Solo atípicos</mat-checkbox>
+      <mat-checkbox formControlName="withAlerts">Con alertas</mat-checkbox>
+      <mat-checkbox formControlName="topRankOnly">Top 10</mat-checkbox>
+    </div>
+  </form>
+  
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-stroked-button (click)="cancel()">Cancelar</button>
+  <button mat-flat-button color="primary" (click)="apply()">Aplicar</button>
+</mat-dialog-actions>

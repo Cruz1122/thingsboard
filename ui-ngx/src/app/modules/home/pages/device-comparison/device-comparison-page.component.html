@@ -23,11 +23,23 @@
     <div class="device-comparison-header">
       <div class="header-content">
         <div class="title-section">
-          <h2 class="page-title" translate>device-comparison.device-comparison</h2>
+          <h3 class="page-title" translate>device-comparison.device-comparison</h3>
           <span class="new-badge">NUEVO</span>
         </div>
         
         <div class="header-actions">
+          <button mat-stroked-button (click)="openFiltersDialog()">
+            <mat-icon>filter_list</mat-icon>
+            <span>Filtros</span>
+          </button>
+          <button mat-stroked-button (click)="openSearchDialog()">
+            <mat-icon>search</mat-icon>
+            <span>Buscar</span>
+          </button>
+          <button mat-stroked-button (click)="openConfigDialog()">
+            <mat-icon>tune</mat-icon>
+            <span translate>common.configuration</span>
+          </button>
           <button mat-raised-button 
                   color="primary"
                   (click)="onRefresh()"
@@ -46,131 +58,10 @@
       </div>
     </div>
 
-    <!-- Configuration Panel -->
-    <mat-expansion-panel class="config-panel">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          <mat-icon>settings</mat-icon>
-          <span translate>common.configuration</span>
-        </mat-panel-title>
-      </mat-expansion-panel-header>
-      
-      <form [formGroup]="configForm" class="config-form">
-        <div class="config-row">
-          <div class="config-group">
-            <mat-form-field appearance="outline">
-              <mat-label translate>device-comparison.max-devices</mat-label>
-              <input matInput 
-                     type="number" 
-                     formControlName="maxDevices"
-                     min="1" 
-                     max="50">
-            </mat-form-field>
-          </div>
-          
-          <div class="config-group">
-            <mat-form-field appearance="outline">
-              <mat-label translate>device-comparison.layout</mat-label>
-              <mat-select formControlName="layout">
-                <mat-option [value]="ComparisonLayout.grid">
-                  {{ 'device-comparison.layout-grid' | translate }}
-                </mat-option>
-                <mat-option [value]="ComparisonLayout.list">
-                  {{ 'device-comparison.layout-list' | translate }}
-                </mat-option>
-                <mat-option [value]="ComparisonLayout.table">
-                  {{ 'device-comparison.layout-table' | translate }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-          
-          <div class="config-group">
-            <mat-form-field appearance="outline">
-              <mat-label translate>device-comparison.refresh-interval</mat-label>
-              <input matInput 
-                     type="number" 
-                     formControlName="refreshInterval"
-                     min="1000">
-              <span matSuffix>ms</span>
-            </mat-form-field>
-          </div>
-        </div>
-        
-        <div class="config-row">
-          <mat-checkbox formControlName="enableRanking">
-            {{ 'device-comparison.enable-ranking' | translate }}
-          </mat-checkbox>
-          
-          <mat-checkbox formControlName="enableOutlierDetection">
-            {{ 'device-comparison.enable-outlier-detection' | translate }}
-          </mat-checkbox>
-          
-          <mat-checkbox formControlName="enableOfflineAlerts">
-            {{ 'device-comparison.enable-offline-alerts' | translate }}
-          </mat-checkbox>
-        </div>
-        
-        <div class="config-row" *ngIf="configForm.get('enableRanking')?.value">
-          <div class="config-group">
-            <mat-form-field appearance="outline">
-              <mat-label translate>device-comparison.ranking-criteria</mat-label>
-              <mat-select formControlName="rankingCriteria">
-                <mat-option [value]="RankingCriteria.performance">
-                  {{ 'device-comparison.ranking-performance' | translate }}
-                </mat-option>
-                <mat-option [value]="RankingCriteria.uptime">
-                  {{ 'device-comparison.ranking-uptime' | translate }}
-                </mat-option>
-                <mat-option [value]="RankingCriteria.custom">
-                  {{ 'device-comparison.ranking-custom' | translate }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-        </div>
-        
-        <div class="config-row" *ngIf="configForm.get('enableOutlierDetection')?.value">
-          <div class="config-group">
-            <mat-form-field appearance="outline">
-              <mat-label translate>device-comparison.outlier-threshold</mat-label>
-              <input matInput 
-                     type="number" 
-                     formControlName="outlierThreshold"
-                     step="0.1"
-                     min="0.1" 
-                     max="5.0">
-              <span matSuffix>σ</span>
-            </mat-form-field>
-          </div>
-        </div>
-      </form>
-    </mat-expansion-panel>
+    <!-- Configuration moved to dialog -->
 
-    <!-- Filters Section -->
+    <!-- Results Section -->
     <div class="filters-section">
-      <mat-form-field appearance="outline" class="search-field">
-        <mat-label translate>action.search</mat-label>
-        <input matInput 
-               [(ngModel)]="searchText"
-               (ngModelChange)="onSearchChange($event)"
-               placeholder="{{ 'device-comparison.search-placeholder' | translate }}">
-        <mat-icon matSuffix>search</mat-icon>
-      </mat-form-field>
-      
-      <mat-form-field appearance="outline" class="filter-field">
-        <mat-label translate>device-comparison.device-type</mat-label>
-        <mat-select [(ngModel)]="selectedDeviceType"
-                    (ngModelChange)="onDeviceTypeChange($event)">
-          <mat-option value="">
-            {{ 'device-comparison.all-types' | translate }}
-          </mat-option>
-          <mat-option *ngFor="let type of getDeviceTypes()" [value]="type">
-            {{ type }}
-          </mat-option>
-        </mat-select>
-      </mat-form-field>
-      
       <div class="results-count">
         <span class="count-text">
           {{ filteredData.length }} {{ 'device-comparison.devices-found' | translate }}
@@ -255,63 +146,51 @@
           </mat-card-content>
           
           <mat-card-actions align="end">
-            <button mat-button color="primary">
+            <button mat-button color="primary" (click)="onDeviceDetails(device)">
               {{ 'common.details' | translate }}
             </button>
           </mat-card-actions>
         </mat-card>
       </div>
 
-      <!-- List Layout -->
-      <div *ngIf="settings.layout === ComparisonLayout.list" 
-           class="devices-list">
-        <mat-list>
-          <mat-list-item *ngFor="let device of filteredData; trackBy: trackByDeviceId"
-                         class="device-list-item"
-                         [class.outlier]="device.isOutlier"
-                         [class.offline]="!device.isOnline">
-            
-            <mat-icon matListIcon 
-                      [style.color]="getStatusColor(device) === 'warn' ? '#f44336' : 
+      <!-- List Layout (Flex-based) -->
+      <div *ngIf="settings.layout === ComparisonLayout.list" class="devices-list">
+        <div class="device-row" *ngFor="let device of filteredData; trackBy: trackByDeviceId"
+             [class.outlier]="device.isOutlier"
+             [class.offline]="!device.isOnline">
+          <div class="row-left">
+            <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#f44336' : 
                                      getStatusColor(device) === 'accent' ? '#ff9800' : '#4caf50'">
               {{ device.isOnline ? 'device_hub' : 'portable_wifi_off' }}
             </mat-icon>
-            
-            <div matLine class="device-info">
+          </div>
+          <div class="row-center">
+            <div class="device-info">
               <span class="device-name">{{ device.deviceName }}</span>
               <span class="device-type">{{ device.deviceType }}</span>
-              
-              <mat-chip *ngIf="settings.enableRanking" 
-                        class="rank-chip-small"
-                        [style.background-color]="device.rank <= 3 ? '#4caf50' : 
-                                                  device.rank <= 10 ? '#ff9800' : '#757575'">
+              <mat-chip *ngIf="settings.enableRanking" class="rank-chip-small"
+                        [style.background-color]="device.rank <= 3 ? '#4caf50' : device.rank <= 10 ? '#ff9800' : '#757575'">
                 #{{ device.rank }}
               </mat-chip>
             </div>
-            
-            <div matLine class="metrics-inline">
-              <span *ngFor="let metric of settings.metrics.slice(0, 3); let last = last"
-                    class="metric-inline">
-                {{ metric.label }}: {{ device.metrics[metric.key] | number:'1.1-1' }}{{ metric.unit }}
+            <div class="metrics-inline">
+              <ng-container *ngFor="let metric of settings.metrics.slice(0, 3); let last = last">
+                <span class="metric-inline" *ngIf="device.metrics[metric.key] !== undefined; else noData">
+                  {{ metric.label }}: {{ device.metrics[metric.key] | number:'1.1-1' }}{{ metric.unit }}
+                </span>
+                <ng-template #noData>
+                  <span class="metric-inline no-data">{{ metric.label }}: —</span>
+                </ng-template>
                 <span *ngIf="!last"> • </span>
-              </span>
+              </ng-container>
             </div>
-            
-            <div class="list-actions">
-              <mat-icon *ngIf="device.isOutlier" 
-                        class="outlier-icon"
-                        matTooltip="{{ 'device-comparison.outlier-detected' | translate }}">
-                warning
-              </mat-icon>
-              
-              <button mat-icon-button>
-                <mat-icon>more_vert</mat-icon>
-              </button>
-            </div>
-            
-            <mat-divider></mat-divider>
-          </mat-list-item>
-        </mat-list>
+          </div>
+          <div class="row-right">
+            <mat-icon *ngIf="device.isOutlier" class="outlier-icon"
+                      matTooltip="{{ 'device-comparison.outlier-detected' | translate }}">warning</mat-icon>
+            <button mat-icon-button><mat-icon>more_vert</mat-icon></button>
+          </div>
+        </div>
       </div>
 
       <!-- Table Layout -->

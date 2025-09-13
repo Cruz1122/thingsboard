@@ -26,17 +26,25 @@ import {
   ComparisonLayout,
   RankingCriteria,
   MetricConfig,
-  deviceComparisonDefaultSettings 
+  deviceComparisonDefaultSettings,
+  AlertLevel
 } from '@home/components/widget/lib/comparison/device-comparison-widget.models';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { DeviceComparisonConfigDialogComponent } from './device-comparison-config-dialog.component';
+import { DeviceComparisonFiltersDialogComponent } from './device-comparison-filters-dialog.component';
+import { DeviceComparisonSearchDialogComponent } from './device-comparison-search-dialog.component';
+import { Subject, forkJoin } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { EntityService } from '@core/http/entity.service';
 import { DeviceService } from '@core/http/device.service';
 import { TelemetryWebsocketService } from '@core/ws/telemetry-websocket.service';
+import { AttributeService } from '@core/http/attribute.service';
 import { DataKeyType } from '@shared/models/telemetry/telemetry.models';
-import { PageLink } from '@shared/models/page/page-link';
+import { PageLink, TimePageLink } from '@shared/models/page/page-link';
 import { Direction } from '@shared/models/page/sort-order';
+import { AlarmService } from '@core/http/alarm.service';
+import { AlarmInfo, AlarmSearchStatus, AlarmSeverity, AlarmQuery } from '@shared/models/alarm.models';
 
 @Component({
   selector: 'tb-device-comparison-page',
@@ -59,6 +67,14 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
   // UI State
   searchText = '';
   selectedDeviceType = '';
+  // Filtros avanzados
+  filters: {
+    online?: boolean;
+    outliersOnly?: boolean;
+    withAlerts?: boolean;
+    topRankOnly?: boolean;
+    deviceType?: string;
+  } = {};
   
   // Enums para template
   ComparisonLayout = ComparisonLayout;
@@ -67,12 +83,15 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
 
   constructor(
     protected store: Store<AppState>,
-    private fb: FormBuilder,
-    private deviceComparisonService: DeviceComparisonService,
-    private entityService: EntityService,
-    private deviceService: DeviceService,
-    private telemetryService: TelemetryWebsocketService,
-    private router: Router
+    private readonly fb: FormBuilder,
+    private readonly deviceComparisonService: DeviceComparisonService,
+    private readonly entityService: EntityService,
+    private readonly deviceService: DeviceService,
+  private readonly telemetryService: TelemetryWebsocketService,
+  private readonly attributeService: AttributeService,
+  private readonly alarmService: AlarmService,
+    private readonly router: Router,
+    private readonly dialog: MatDialog
   ) {
     super(store);
   }
@@ -86,6 +105,62 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  openFiltersDialog() {
+    const dialogRef = this.dialog.open(DeviceComparisonFiltersDialogComponent, {
+      disableClose: false,
+      width: '520px',
+      data: { filters: this.filters, deviceTypes: this.getDeviceTypes() }
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.filters = { ...result };
+        this.processDeviceData();
+      }
+    });
+  }
+
+  openSearchDialog() {
+    const dialogRef = this.dialog.open(DeviceComparisonSearchDialogComponent, {
+      disableClose: false,
+      width: '520px',
+      data: { searchText: this.searchText }
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (typeof result === 'string') {
+        this.searchText = result;
+        this.processDeviceData();
+      }
+    });
+  }
+
+  openConfigDialog() {
+    const dialogRef = this.dialog.open(DeviceComparisonConfigDialogComponent, {
+      disableClose: true,
+      width: '480px',
+      data: { settings: this.settings }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.settings = { ...result };
+        // Sync reactive form for consistency (if any other bindings rely on it)
+        if (this.configForm) {
+          this.configForm.patchValue({
+            maxDevices: this.settings.maxDevices,
+            layout: this.settings.layout,
+            enableRanking: this.settings.enableRanking,
+            rankingCriteria: this.settings.rankingCriteria,
+            enableOutlierDetection: this.settings.enableOutlierDetection,
+            outlierThreshold: this.settings.outlierThreshold,
+            enableOfflineAlerts: this.settings.enableOfflineAlerts,
+            refreshInterval: this.settings.refreshInterval
+          }, { emitEvent: false });
+        }
+        this.processDeviceData();
+      }
+    });
   }
 
   private initializeForm() {
@@ -117,17 +192,17 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
     const pageLink = new PageLink(100, 0, '', { property: 'name', direction: Direction.ASC });
     this.deviceService.getTenantDeviceInfos(pageLink, '')
       .pipe(takeUntil(this.destroy$))
-      .subscribe(
-        (pageData) => {
+      .subscribe({
+        next: (pageData) => {
           this.deviceData = pageData.data.map(device => this.mapDeviceToComparisonData(device));
-          this.processDeviceData();
-          this.loading = false;
+          // Cargar telemetría más reciente para las métricas configuradas
+          this.loadLatestMetricsForDevices(pageData.data);
         },
-        (error) => {
+        error: (error) => {
           console.error('Error loading devices:', error);
           this.loading = false;
         }
-      );
+      });
   }
 
   /**
@@ -138,8 +213,8 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
     const deviceType = device.type || 'Device';
     
     // Determinar si está online basado en la última actividad
-    const isOnline = device.lastActivityTime && 
-      (Date.now() - device.lastActivityTime) < (5 * 60 * 1000); // 5 minutos
+    const lastActive = device.lastActivityTime ?? device.active ? Date.now() : 0;
+    const isOnline = !!lastActive && (Date.now() - lastActive) < (5 * 60 * 1000); // 5 min
     
     // Cargar métricas de telemetría (esto se puede mejorar cargando datos reales)
     const metrics = this.getDeviceMetrics(device.id);
@@ -162,14 +237,125 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
    * Obtiene las métricas de telemetría de un dispositivo
    */
   private getDeviceMetrics(deviceId: any): { [key: string]: number } {
-    // Por ahora retornamos métricas vacías, pero aquí se pueden cargar datos reales
-    // de telemetría usando el TelemetryWebsocketService
-    return {
-      temperature: Math.random() * 100, // Temporal - reemplazar con datos reales
-      humidity: Math.random() * 100,    // Temporal - reemplazar con datos reales
-      battery: Math.random() * 100,     // Temporal - reemplazar con datos reales
-      signal: Math.random() * 100       // Temporal - reemplazar con datos reales
-    };
+    // Inicialmente sin datos; se rellenará con telemetría real en loadLatestMetricsForDevices
+    return {};
+  }
+
+  /**
+   * Carga la telemetría más reciente (latest timeseries) para las claves definidas en settings.metrics
+   * y actualiza this.deviceData en su sitio.
+   */
+  private loadLatestMetricsForDevices(deviceInfos: any[]) {
+    const keys = Array.from(new Set(this.settings.metrics.map(m => m.key).filter(Boolean)));
+    if (!deviceInfos.length) {
+      this.processDeviceData();
+      this.loading = false;
+      return;
+    }
+    if (!keys.length) {
+      // Si no hay métricas configuradas, cargar solo alarmas
+      this.loadActiveAlarmsForDevices(deviceInfos);
+      return;
+    }
+
+    // Ejecutar solicitudes en paralelo; cada resultado se asigna por índice
+    const requests = deviceInfos.map(info =>
+      this.attributeService.getEntityTimeseriesLatest(info.id, keys).pipe(
+        // No tipamos estrictamente el resultado para ser tolerantes al backend
+        // y devolvemos objeto vacío en caso de error
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (source => source),
+      )
+    );
+
+    // Suscribir y actualizar métricas (join de todas las solicitudes)
+  forkJoin(requests).pipe(takeUntil(this.destroy$)).subscribe({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      next: (results: any[]) => {
+        results.forEach((ts, idx) => {
+          const metrics: { [key: string]: number } = {};
+          keys.forEach(k => {
+            const series = ts?.[k];
+            if (Array.isArray(series) && series.length) {
+              const v = series[0]?.value;
+              const num = typeof v === 'number' ? v : parseFloat(v);
+              if (!isNaN(num)) {
+                metrics[k] = num;
+              }
+            }
+          });
+          this.deviceData[idx].metrics = { ...this.deviceData[idx].metrics, ...metrics };
+        });
+        // Después de cargar métricas, cargar alarmas reales
+        this.loadActiveAlarmsForDevices(deviceInfos);
+      },
+      error: () => {
+        // Si falló la carga de métricas, intentar aún así cargar alarmas
+        this.loadActiveAlarmsForDevices(deviceInfos);
+      }
+    });
+  }
+
+  /**
+   * Carga alarmas reales activas para cada dispositivo y las asigna a device.alerts
+   */
+  private loadActiveAlarmsForDevices(deviceInfos: any[]) {
+    if (!deviceInfos?.length) {
+      this.processDeviceData();
+      this.loading = false;
+      return;
+    }
+
+    const now = Date.now();
+    const startTime = now - 7 * 24 * 60 * 60 * 1000; // última semana
+    const timePage = new TimePageLink(10, 0, null, null, startTime, now);
+
+    const alarmRequests = deviceInfos.map(info => {
+      const entityId = info.id; // { entityType: 'DEVICE', id: '...' }
+      const query = new AlarmQuery(entityId, timePage, AlarmSearchStatus.ACTIVE, null, true);
+      return this.alarmService.getAlarms(query);
+    });
+
+    forkJoin(alarmRequests).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (pages) => {
+        pages.forEach((page, idx) => {
+          const alarms: AlarmInfo[] = page?.data || [];
+          const mapped = alarms.map(a => ({
+            level: this.mapSeverityToAlertLevel(a.severity),
+            message: this.formatAlarmLabel(a),
+            timestamp: a.startTs
+          }));
+          this.deviceData[idx].alerts = mapped;
+        });
+        this.processDeviceData();
+        this.loading = false;
+      },
+      error: () => {
+        // Si falló carga de alarmas, continuar sin ellas
+        this.processDeviceData();
+        this.loading = false;
+      }
+    });
+  }
+
+  private mapSeverityToAlertLevel(severity: AlarmSeverity): AlertLevel {
+    switch (severity) {
+      case AlarmSeverity.CRITICAL:
+      case AlarmSeverity.MAJOR:
+        return AlertLevel.error;
+      case AlarmSeverity.MINOR:
+      case AlarmSeverity.WARNING:
+        return AlertLevel.warning;
+      default:
+        return AlertLevel.info;
+    }
+  }
+
+  private formatAlarmLabel(a: AlarmInfo): string {
+    // Preferir detalles.message si existe; si no, tipo + severidad
+    const base = (a.details?.message) ? a.details.message : a.type || 'Alarma';
+    const sev = a.severity ? a.severity.toString() : '';
+    return sev ? `${base} (${sev})` : base;
   }
 
   private processDeviceData() {
@@ -181,10 +367,14 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
         device.deviceName.toLowerCase().includes(this.searchText.toLowerCase()) ||
         device.deviceType.toLowerCase().includes(this.searchText.toLowerCase());
       
-      const matchesType = !this.selectedDeviceType || 
-        device.deviceType === this.selectedDeviceType;
-      
-      return matchesSearch && matchesType;
+      const effectiveType = this.filters.deviceType ?? this.selectedDeviceType;
+      const matchesType = !effectiveType || device.deviceType === effectiveType;
+      const matchesOnline = this.filters.online == null ? true : (device.isOnline === this.filters.online);
+      const matchesOutliers = this.filters.outliersOnly ? device.isOutlier : true;
+      const matchesAlerts = this.filters.withAlerts ? (device.alerts && device.alerts.length > 0) : true;
+      const matchesTopRank = this.filters.topRankOnly ? (device.rank > 0 && device.rank <= 10) : true;
+
+      return matchesSearch && matchesType && matchesOnline && matchesOutliers && matchesAlerts && matchesTopRank;
     });
 
     // Procesar con el servicio
@@ -198,11 +388,7 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
       this.settings
     );
     
-    // Generar alertas
-    this.filteredData = this.deviceComparisonService.generateAlerts(
-      this.filteredData,
-      this.settings
-    );
+    // Ya no generamos alertas sintéticas aquí; device.alerts proviene de alarmas reales
 
     // Aplicar límite máximo
     if (this.filteredData.length > this.settings.maxDevices) {
@@ -225,7 +411,17 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
   }
 
   onExportData() {
-    this.deviceComparisonService.exportDeviceData(this.filteredData, 'csv');
+    this.deviceComparisonService.exportDeviceData(this.filteredData, 'csv').subscribe(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `device-comparison-${ts}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
   }
 
   addMetric() {
@@ -262,7 +458,7 @@ export class DeviceComparisonPageComponent extends PageComponent implements OnIn
 
   getStatusText(device: DeviceComparisonData): string {
     if (!device.isOnline) return 'Desconectado';
-    if (device.alerts.length > 0) return 'Con alertas';
+    if (device.alerts.length > 0) return 'Con alarmas';
     return 'En línea';
   }
 

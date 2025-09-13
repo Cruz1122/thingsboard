@@ -221,23 +221,113 @@ export class DeviceComparisonService {
     device: DeviceComparisonData,
     settings: DeviceComparisonWidgetSettings
   ): number {
-    // Implementar evaluación de fórmula personalizada en el futuro
-    // Por ahora, usar performance score como fallback
-    return this.calculatePerformanceScore(device, settings);
+    // Si hay fórmula personalizada, intentar evaluarla de manera segura
+    const formula = (settings.customRankingFormula || '').trim();
+    if (formula) {
+      const val = this.evaluateCustomFormula(formula, device, settings);
+      if (!isNaN(val)) {
+        // Escalar rudimentariamente a 0..100 si parece estar en 0..1
+        const scaled = val <= 1 ? val * 100 : val;
+        return Math.max(0, Math.min(100, scaled));
+      }
+    }
+
+    // Estrategia mejorada para "Personalizado" sin fórmula:
+    // - Normaliza cada métrica con una función suave basada en thresholds
+    // - Promedia ponderado por weight
+
+    const enabledMetrics = settings.metrics.filter(m => m.enabled);
+    if (enabledMetrics.length === 0) {
+      return this.calculatePerformanceScore(device, settings);
+    }
+
+    // Requiere un contexto poblacional; como este servicio no lo tiene, derivamos
+    // una aproximación usando thresholds para normalizar el valor individual.
+    // Si hay valores > warning se mapean hacia 100, entre error y warning a [0..50], por debajo de error a 0.
+    let total = 0;
+    let weights = 0;
+    enabledMetrics.forEach(metric => {
+      const value = device.metrics[metric.key];
+      if (isDefinedAndNotNull(value)) {
+        const normalized = this.normalizeMetricValueAdvanced(value, metric);
+        total += normalized * metric.weight;
+        weights += metric.weight;
+      }
+    });
+    if (weights === 0) {
+      return this.calculatePerformanceScore(device, settings);
+    }
+    let score = total / weights;
+    if (!device.isOnline) {
+      score *= 0.8; // penalización menor que performance
+    }
+    return score;
+  }
+
+  // Evaluación básica de fórmula personalizada con whitelisting de caracteres
+  private evaluateCustomFormula(
+    formula: string,
+    device: DeviceComparisonData,
+    settings: DeviceComparisonWidgetSettings
+  ): number {
+    try {
+      // Reemplaza claves de métricas por sus valores numéricos
+      let expr = formula;
+      settings.metrics.forEach(m => {
+        const re = new RegExp(`\\b${m.key}\\b`, 'g');
+        const v = isDefinedAndNotNull(device.metrics[m.key]) ? device.metrics[m.key] : 0;
+        expr = expr.replace(re, String(v));
+      });
+      // Whitelist: dígitos, operadores, espacios, paréntesis y punto
+      if (!/^[0-9+\-*/().\s]*$/.test(expr)) {
+        return NaN;
+      }
+      // Evalúa de forma aislada
+      // eslint-disable-next-line no-new-func
+      const fn = new Function(`return (${expr});`);
+      const result = Number(fn());
+      return isNaN(result) ? NaN : result;
+    } catch {
+      return NaN;
+    }
   }
 
   private normalizeMetricValue(value: number, metric: MetricConfig): number {
-    // Normalizar valor entre 0 y 100 basado en umbrales
+    // Normalización básica por umbrales (0..100)
     if (value <= metric.thresholds.error) {
       return 0;
     } else if (value <= metric.thresholds.warning) {
-      const range = metric.thresholds.warning - metric.thresholds.error;
+      const range = Math.max(1e-6, metric.thresholds.warning - metric.thresholds.error);
       const position = value - metric.thresholds.error;
       return (position / range) * 50;
     } else {
       // Valores por encima del umbral de warning obtienen puntaje completo
       return 100;
     }
+  }
+
+  // Normalización avanzada para ranking personalizado
+  private normalizeMetricValueAdvanced(value: number, metric: MetricConfig): number {
+    // Similar a normalizeMetricValue pero con suavizado:
+    // - por debajo de error: decae de forma exponencial a 0
+    // - entre error y warning: interpolación suave (easeInOut)
+    // - por encima de warning: se usa una curva logarítmica hasta 100 con saturación
+    const e = metric.thresholds.error;
+    const w = metric.thresholds.warning;
+    if (value <= e) {
+      const diff = e - value;
+      return Math.max(0, 50 * Math.exp(-diff / Math.max(1e-6, e)) - 50); // ~0..0
+    }
+    if (value <= w) {
+      const t = (value - e) / Math.max(1e-6, (w - e));
+      // easeInOutQuad
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      return 50 * eased; // 0..50
+    }
+    // value > w
+    const over = value - w;
+    const scaled = 50 + 50 * Math.tanh(over / Math.max(1e-3, w)); // 50..~100 con saturación
+    return Math.min(100, Math.max(0, scaled));
   }
 
   private detectOutliersForMetric(

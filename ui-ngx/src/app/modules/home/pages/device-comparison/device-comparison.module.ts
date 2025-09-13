@@ -20,10 +20,16 @@ import { SharedModule } from '@shared/shared.module';
 import { DeviceComparisonRoutingModule } from './device-comparison-routing.module';
 import { DeviceComparisonPageComponent } from './device-comparison-page.component';
 import { DeviceComparisonService } from '@home/components/widget/lib/comparison/device-comparison.service';
+import { DeviceComparisonConfigDialogComponent } from './device-comparison-config-dialog.component';
+import { DeviceComparisonFiltersDialogComponent } from './device-comparison-filters-dialog.component';
+import { DeviceComparisonSearchDialogComponent } from './device-comparison-search-dialog.component';
 
 @NgModule({
   declarations: [
-    DeviceComparisonPageComponent
+    DeviceComparisonPageComponent,
+    DeviceComparisonConfigDialogComponent,
+    DeviceComparisonFiltersDialogComponent,
+    DeviceComparisonSearchDialogComponent
   ],
   imports: [
     CommonModule,

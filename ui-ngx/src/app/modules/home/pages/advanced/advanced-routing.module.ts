@@ -26,7 +26,7 @@ export const advancedRoutes: Routes = [
     data: {
       auth: [Authority.TENANT_ADMIN, Authority.CUSTOMER_USER],
       breadcrumb: {
-        menuId: MenuId.device_comparison
+        menuId: MenuId.features
       }
     }
   }

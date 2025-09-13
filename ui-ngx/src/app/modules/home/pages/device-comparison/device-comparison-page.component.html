@@ -1,0 +1,410 @@
+<!--
+
+    Copyright © 2016-2025 The Thingsboard Authors
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+
+<div class="tb-absolute-fill">
+  <div class="mat-padding">
+    
+    <!-- Header Section -->
+    <div class="tb-details-buttons xs:flex xs:flex-col">
+      <div class="header-content">
+        <div class="title-section">
+          <h2 class="page-title" translate>device-comparison.device-comparison</h2>
+          <span class="new-badge">NUEVO</span>
+        </div>
+        
+        <div class="header-actions">
+          <button mat-raised-button 
+                  color="primary"
+                  (click)="onRefresh()"
+                  [disabled]="loading">
+            <mat-icon>refresh</mat-icon>
+            <span translate>action.refresh</span>
+          </button>
+          
+          <button mat-raised-button
+                  color="primary"
+                  (click)="onExportData()"
+                  [disabled]="!filteredData.length">
+            <mat-icon>download</mat-icon>
+            <span translate>action.export</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configuration Panel -->
+    <mat-expansion-panel class="config-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon>settings</mat-icon>
+          <span translate>common.configuration</span>
+        </mat-panel-title>
+      </mat-expansion-panel-header>
+      
+      <form [formGroup]="configForm" class="config-form">
+        <div class="config-row">
+          <div class="config-group">
+            <mat-form-field appearance="outline">
+              <mat-label translate>device-comparison.max-devices</mat-label>
+              <input matInput 
+                     type="number" 
+                     formControlName="maxDevices"
+                     min="1" 
+                     max="50">
+            </mat-form-field>
+          </div>
+          
+          <div class="config-group">
+            <mat-form-field appearance="outline">
+              <mat-label translate>device-comparison.layout</mat-label>
+              <mat-select formControlName="layout">
+                <mat-option [value]="ComparisonLayout.grid">
+                  {{ 'device-comparison.layout-grid' | translate }}
+                </mat-option>
+                <mat-option [value]="ComparisonLayout.list">
+                  {{ 'device-comparison.layout-list' | translate }}
+                </mat-option>
+                <mat-option [value]="ComparisonLayout.table">
+                  {{ 'device-comparison.layout-table' | translate }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          
+          <div class="config-group">
+            <mat-form-field appearance="outline">
+              <mat-label translate>device-comparison.refresh-interval</mat-label>
+              <input matInput 
+                     type="number" 
+                     formControlName="refreshInterval"
+                     min="1000">
+              <span matSuffix>ms</span>
+            </mat-form-field>
+          </div>
+        </div>
+        
+        <div class="config-row">
+          <mat-checkbox formControlName="enableRanking">
+            {{ 'device-comparison.enable-ranking' | translate }}
+          </mat-checkbox>
+          
+          <mat-checkbox formControlName="enableOutlierDetection">
+            {{ 'device-comparison.enable-outlier-detection' | translate }}
+          </mat-checkbox>
+          
+          <mat-checkbox formControlName="enableOfflineAlerts">
+            {{ 'device-comparison.enable-offline-alerts' | translate }}
+          </mat-checkbox>
+        </div>
+        
+        <div class="config-row" *ngIf="configForm.get('enableRanking')?.value">
+          <div class="config-group">
+            <mat-form-field appearance="outline">
+              <mat-label translate>device-comparison.ranking-criteria</mat-label>
+              <mat-select formControlName="rankingCriteria">
+                <mat-option [value]="RankingCriteria.performance">
+                  {{ 'device-comparison.ranking-performance' | translate }}
+                </mat-option>
+                <mat-option [value]="RankingCriteria.uptime">
+                  {{ 'device-comparison.ranking-uptime' | translate }}
+                </mat-option>
+                <mat-option [value]="RankingCriteria.custom">
+                  {{ 'device-comparison.ranking-custom' | translate }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </div>
+        
+        <div class="config-row" *ngIf="configForm.get('enableOutlierDetection')?.value">
+          <div class="config-group">
+            <mat-form-field appearance="outline">
+              <mat-label translate>device-comparison.outlier-threshold</mat-label>
+              <input matInput 
+                     type="number" 
+                     formControlName="outlierThreshold"
+                     step="0.1"
+                     min="0.1" 
+                     max="5.0">
+              <span matSuffix>σ</span>
+            </mat-form-field>
+          </div>
+        </div>
+      </form>
+    </mat-expansion-panel>
+
+    <!-- Filters Section -->
+    <div class="tb-details-buttons xs:flex xs:flex-col">
+      <div class="filters-section">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label translate>action.search</mat-label>
+          <input matInput 
+                 [(ngModel)]="searchText"
+                 (ngModelChange)="onSearchChange($event)"
+                 placeholder="{{ 'device-comparison.search-placeholder' | translate }}">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+        
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label translate>device-comparison.device-type</mat-label>
+          <mat-select [(ngModel)]="selectedDeviceType"
+                      (ngModelChange)="onDeviceTypeChange($event)">
+            <mat-option value="">
+              {{ 'device-comparison.all-types' | translate }}
+            </mat-option>
+            <mat-option *ngFor="let type of getDeviceTypes()" [value]="type">
+              {{ type }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+        
+        <div class="results-count">
+          <span class="count-text">
+            {{ filteredData.length }} {{ 'device-comparison.devices-found' | translate }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div *ngIf="loading" class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p translate>common.loading</p>
+    </div>
+
+    <!-- Content Section -->
+    <div *ngIf="!loading" class="content-section">
+      
+      <!-- Grid Layout -->
+      <div *ngIf="settings.layout === ComparisonLayout.grid" 
+           class="devices-grid">
+        <mat-card *ngFor="let device of filteredData; trackBy: trackByDeviceId" 
+                  class="device-card"
+                  [class.outlier]="device.isOutlier"
+                  [class.offline]="!device.isOnline">
+          
+          <mat-card-header>
+            <div mat-card-avatar class="device-avatar">
+              <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
+                                      getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
+                {{ getDeviceIcon(device) }}
+              </mat-icon>
+            </div>
+            
+            <mat-card-title>{{ device.deviceName }}</mat-card-title>
+            <mat-card-subtitle>
+              {{ device.deviceType }} • {{ getStatusText(device) }}
+            </mat-card-subtitle>
+            
+            <div class="card-actions">
+              <mat-chip *ngIf="settings.enableRanking" 
+                        class="rank-chip"
+                        [style.background-color]="device.rank <= 3 ? '#305680' : 
+                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+                #{{ device.rank }}
+              </mat-chip>
+              
+              <mat-icon *ngIf="device.isOutlier" 
+                        class="outlier-icon"
+                        matTooltip="{{ 'device-comparison.outlier-detected' | translate }}">
+                warning
+              </mat-icon>
+            </div>
+          </mat-card-header>
+          
+          <mat-card-content>
+            <div class="metrics-grid">
+              <div *ngFor="let metric of settings.metrics.slice(0, 4)" 
+                   class="metric-item">
+                <div class="metric-label">{{ metric.label }}</div>
+                <div class="metric-value">
+                  {{ device.metrics[metric.key] | number:'1.2-2' }}
+                  <span class="metric-unit">{{ metric.unit }}</span>
+                </div>
+                
+                <mat-progress-bar 
+                  mode="determinate"
+                  [value]="device.metrics[metric.key]"
+                  [color]="device.metrics[metric.key] > metric.thresholds.error ? 'warn' :
+                           device.metrics[metric.key] > metric.thresholds.warning ? 'accent' : 'primary'">
+                </mat-progress-bar>
+              </div>
+            </div>
+            
+            <div *ngIf="device.alerts.length > 0" class="alerts-section">
+              <div class="alerts-list">
+                <span *ngFor="let alert of device.alerts.slice(0, 2)"
+                      class="alert-badge"
+                      [class.error]="alert.level === 'error'"
+                      [class.warning]="alert.level === 'warning'">
+                  <mat-icon class="alert-icon">{{ alert.level === 'error' ? 'error' : 'warning' }}</mat-icon>
+                  {{ alert.message }}
+                </span>
+              </div>
+            </div>
+          </mat-card-content>
+          
+          <mat-card-actions align="end">
+            <button mat-button color="primary" (click)="onDeviceDetails(device)">
+              {{ 'common.details' | translate }}
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      </div>
+
+      <!-- List Layout -->
+      <div *ngIf="settings.layout === ComparisonLayout.list" 
+           class="devices-list">
+        <mat-list>
+          <mat-list-item *ngFor="let device of filteredData; trackBy: trackByDeviceId"
+                         class="device-list-item"
+                         [class.outlier]="device.isOutlier"
+                         [class.offline]="!device.isOnline">
+            
+            <mat-icon matListIcon 
+                      [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
+                                     getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
+              {{ getDeviceIcon(device) }}
+            </mat-icon>
+            
+            <div matLine class="device-info">
+              <span class="device-name">{{ device.deviceName }}</span>
+              <span class="device-type">{{ device.deviceType }}</span>
+              
+              <mat-chip *ngIf="settings.enableRanking" 
+                        class="rank-chip-small"
+                        [style.background-color]="device.rank <= 3 ? '#305680' : 
+                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+                #{{ device.rank }}
+              </mat-chip>
+            </div>
+            
+            <div matLine class="metrics-inline">
+              <span *ngFor="let metric of settings.metrics.slice(0, 3); let last = last"
+                    class="metric-inline">
+                {{ metric.label }}: {{ device.metrics[metric.key] | number:'1.2-2' }}{{ metric.unit }}
+                <span *ngIf="!last"> • </span>
+              </span>
+            </div>
+            
+            <div class="list-actions">
+              <mat-icon *ngIf="device.isOutlier" 
+                        class="outlier-icon"
+                        matTooltip="{{ 'device-comparison.outlier-detected' | translate }}">
+                warning
+              </mat-icon>
+              
+              <button mat-icon-button>
+                <mat-icon>more_vert</mat-icon>
+              </button>
+            </div>
+            
+            <mat-divider></mat-divider>
+          </mat-list-item>
+        </mat-list>
+      </div>
+
+      <!-- Table Layout -->
+      <div *ngIf="settings.layout === ComparisonLayout.table" 
+           class="devices-table">
+        <table mat-table [dataSource]="filteredData" class="comparison-table">
+          
+          <ng-container matColumnDef="rank" *ngIf="settings.enableRanking">
+            <th mat-header-cell *matHeaderCellDef translate>device-comparison.rank</th>
+            <td mat-cell *matCellDef="let device">
+              <mat-chip class="rank-chip-table"
+                        [style.background-color]="device.rank <= 3 ? '#305680' : 
+                                                  device.rank <= 10 ? '#527dad' : '#a7c1de'">
+                #{{ device.rank }}
+              </mat-chip>
+            </td>
+          </ng-container>
+          
+          <ng-container matColumnDef="device">
+            <th mat-header-cell *matHeaderCellDef translate>device-comparison.device</th>
+            <td mat-cell *matCellDef="let device">
+              <div class="device-cell">
+                <mat-icon [style.color]="getStatusColor(device) === 'warn' ? '#d32f2f' : 
+                                         getStatusColor(device) === 'accent' ? '#f57c00' : '#305680'">
+                  {{ getDeviceIcon(device) }}
+                </mat-icon>
+                <div class="device-info">
+                  <div class="device-name">{{ device.deviceName }}</div>
+                  <div class="device-type">{{ device.deviceType }}</div>
+                </div>
+                <mat-icon *ngIf="device.isOutlier" 
+                          class="outlier-icon"
+                          matTooltip="{{ 'device-comparison.outlier-detected' | translate }}">
+                  warning
+                </mat-icon>
+              </div>
+            </td>
+          </ng-container>
+          
+          <ng-container *ngFor="let metric of settings.metrics.slice(0, 5)" 
+                        [matColumnDef]="metric.key">
+            <th mat-header-cell *matHeaderCellDef>{{ metric.label }}</th>
+            <td mat-cell *matCellDef="let device">
+              <div class="metric-cell">
+                <span class="metric-value">
+                  {{ device.metrics[metric.key] | number:'1.2-2' }}{{ metric.unit }}
+                </span>
+                <mat-progress-bar 
+                  mode="determinate"
+                  [value]="(device.metrics[metric.key] / 100) * 100"
+                  [color]="device.metrics[metric.key] > metric.thresholds.error ? 'warn' :
+                           device.metrics[metric.key] > metric.thresholds.warning ? 'accent' : 'primary'"
+                  class="metric-progress">
+                </mat-progress-bar>
+              </div>
+            </td>
+          </ng-container>
+          
+          <ng-container matColumnDef="alerts">
+            <th mat-header-cell *matHeaderCellDef translate>device-comparison.alerts</th>
+            <td mat-cell *matCellDef="let device">
+              <div class="alerts-list-table">
+                <span *ngFor="let alert of device.alerts.slice(0, 1)"
+                      class="alert-badge-small"
+                      [class.error]="alert.level === 'error'"
+                      [class.warning]="alert.level === 'warning'">
+                  {{ alert.message }}
+                </span>
+                <span *ngIf="device.alerts.length > 1" class="more-alerts">
+                  +{{ device.alerts.length - 1 }}
+                </span>
+              </div>
+            </td>
+          </ng-container>
+          
+          <tr mat-header-row *matHeaderRowDef="getDisplayedColumns()"></tr>
+          <tr mat-row *matRowDef="let row; columns: getDisplayedColumns();"
+              [class.outlier-row]="row.isOutlier"
+              [class.offline-row]="!row.isOnline"></tr>
+        </table>
+      </div>
+      
+      <!-- Empty State -->
+      <div *ngIf="!filteredData.length" class="empty-state">
+        <mat-icon class="empty-icon">compare_arrows</mat-icon>
+        <h3 translate>device-comparison.no-devices</h3>
+        <p translate>device-comparison.no-devices-description</p>
+      </div>
+    </div>
+  </div>
+</div>

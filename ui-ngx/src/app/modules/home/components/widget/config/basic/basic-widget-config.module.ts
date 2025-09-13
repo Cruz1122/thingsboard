@@ -41,6 +41,9 @@ import {
   ValueCardBasicConfigComponent
 } from '@home/components/widget/config/basic/cards/value-card-basic-config.component';
 import {
+  DeviceComparisonBasicConfigComponent
+} from '@home/components/widget/config/basic/comparison/device-comparison-basic-config.component';
+import {
   AggregatedValueCardBasicConfigComponent
 } from '@home/components/widget/config/basic/cards/aggregated-value-card-basic-config.component';
 import {
@@ -160,6 +163,7 @@ import { MapBasicConfigComponent } from '@home/components/widget/config/basic/ma
     FlotBasicConfigComponent,
     AlarmsTableBasicConfigComponent,
     ValueCardBasicConfigComponent,
+    DeviceComparisonBasicConfigComponent,
     AggregatedValueCardBasicConfigComponent,
     AggregatedDataKeyRowComponent,
     AggregatedDataKeysPanelComponent,
@@ -216,6 +220,7 @@ import { MapBasicConfigComponent } from '@home/components/widget/config/basic/ma
     FlotBasicConfigComponent,
     AlarmsTableBasicConfigComponent,
     ValueCardBasicConfigComponent,
+    DeviceComparisonBasicConfigComponent,
     AggregatedValueCardBasicConfigComponent,
     AggregatedDataKeyRowComponent,
     AggregatedDataKeysPanelComponent,

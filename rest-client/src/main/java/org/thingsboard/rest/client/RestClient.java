@@ -15,7 +15,8 @@
  */
 package org.thingsboard.rest.client;
 
-import com.auth0.jwt.JWT;
+import org.springframework.web.util.UriComponentsBuilder;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Strings;
@@ -198,7 +199,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.thingsboard.server.common.data.StringUtils.isEmpty;
@@ -208,7 +208,6 @@ import static org.thingsboard.server.common.data.StringUtils.isEmpty;
  */
 public class RestClient implements Closeable {
     private static final String JWT_TOKEN_HEADER_PARAM = "X-Authorization";
-    private static final long AVG_REQUEST_TIMEOUT = TimeUnit.SECONDS.toMillis(30);
     protected static final String ACTIVATE_TOKEN_REGEX = "/api/noauth/activate?activateToken=";
     private final LazyInitializer<ExecutorService> executor = LazyInitializer.<ExecutorService>builder()
             .setInitializer(() -> ThingsBoardExecutors.newWorkStealingPool(10, getClass()))
@@ -217,13 +216,7 @@ public class RestClient implements Closeable {
     protected final RestTemplate loginRestTemplate;
     protected final String baseURL;
 
-    private String username;
-    private String password;
-    private String mainToken;
-    private String refreshToken;
-    private long mainTokenExpTs;
-    private long refreshTokenExpTs;
-    private long clientServerTimeDiff;
+    private final TokenManager tokenManager;
 
     public RestClient(String baseURL) {
         this(new RestTemplate(), baseURL);
@@ -237,70 +230,79 @@ public class RestClient implements Closeable {
         this.restTemplate = restTemplate;
         this.loginRestTemplate = new RestTemplate(restTemplate.getRequestFactory());
         this.baseURL = baseURL;
+
+        this.tokenManager = new TokenManager(baseURL, this.loginRestTemplate, accessToken);
+
         this.restTemplate.getInterceptors().add((request, bytes, execution) -> {
             HttpRequest wrapper = new HttpRequestWrapper(request);
-            if (accessToken == null) {
-                long calculatedTs = System.currentTimeMillis() + clientServerTimeDiff + AVG_REQUEST_TIMEOUT;
-                if (calculatedTs > mainTokenExpTs) {
-                    synchronized (RestClient.this) {
-                        if (calculatedTs > mainTokenExpTs) {
-                            if (calculatedTs < refreshTokenExpTs) {
-                                refreshToken();
-                            } else {
-                                doLogin();
-                            }
-                        }
-                    }
-                }
-            } else {
-                mainToken = accessToken;
-            }
-            wrapper.getHeaders().set(JWT_TOKEN_HEADER_PARAM, "Bearer " + mainToken);
+            String token = tokenManager.ensureValidToken();
+            wrapper.getHeaders().set(JWT_TOKEN_HEADER_PARAM, "Bearer " + token);
             return execution.execute(wrapper, bytes);
         });
     }
 
+    // === Helpers HTTP (NUEVOS) ===
+    private <T> Optional<T> getOptional(String pathTemplate, Class<T> type, Object... uriVars) {
+        try {
+            ResponseEntity<T> resp = restTemplate.getForEntity(baseURL + pathTemplate, type, uriVars);
+            return Optional.ofNullable(resp.getBody());
+        } catch (HttpClientErrorException ex) {
+            if (ex.getStatusCode() == HttpStatus.NOT_FOUND) return Optional.empty();
+            throw ex;
+        }
+    }
+
+    private <T> Optional<T> getOptional(String pathTemplate, Class<T> type, Map<String, ?> uriVars) {
+        try {
+            ResponseEntity<T> resp = restTemplate.getForEntity(baseURL + pathTemplate, type, uriVars);
+            return Optional.ofNullable(resp.getBody());
+        } catch (HttpClientErrorException ex) {
+            if (ex.getStatusCode() == HttpStatus.NOT_FOUND) return Optional.empty();
+            throw ex;
+        }
+    }
+
+    // === Fin helpers ===
+
+    // === URL Builders (NUEVOS) ===
+
+    private String buildUrl(String path, Map<String, ?> queryParams) {
+        UriComponentsBuilder b = UriComponentsBuilder.fromUriString(baseURL).path(path);
+        if (queryParams != null) {
+            queryParams.forEach((k, v) -> {
+                if (v != null) b.queryParam(k, v);
+            });
+        }
+        return b.build().toUriString();
+    }
+
+    /** Reutiliza tu lógica existente de PageLink para llenar un mapa de querys */
+        private String buildUrlWithPage(String path, PageLink pageLink) {
+            Map<String, String> query = new HashMap<>();
+            addPageLinkToParam(query, pageLink);
+            return buildUrl(path, query);
+        }
+        // === Fin URL Builders ===
+        
     public RestTemplate getRestTemplate() {
         return restTemplate;
     }
 
     public String getToken() {
-        return mainToken;
+        return tokenManager.getMainToken();
     }
 
     public String getRefreshToken() {
-        return refreshToken;
+        return tokenManager.getRefreshToken();
     }
 
     public void refreshToken() {
-        Map<String, String> refreshTokenRequest = new HashMap<>();
-        refreshTokenRequest.put("refreshToken", refreshToken);
-        long ts = System.currentTimeMillis();
-        ResponseEntity<JsonNode> tokenInfo = loginRestTemplate.postForEntity(baseURL + "/api/auth/token", refreshTokenRequest, JsonNode.class);
-        setTokenInfo(ts, tokenInfo.getBody());
+        tokenManager.refresh();
     }
 
     public void login(String username, String password) {
-        this.username = username;
-        this.password = password;
-        doLogin();
-    }
-
-    private void doLogin() {
-        long ts = System.currentTimeMillis();
-        Map<String, String> loginRequest = new HashMap<>();
-        loginRequest.put("username", username);
-        loginRequest.put("password", password);
-        ResponseEntity<JsonNode> tokenInfo = loginRestTemplate.postForEntity(baseURL + "/api/auth/login", loginRequest, JsonNode.class);
-        setTokenInfo(ts, tokenInfo.getBody());
-    }
-
-    private synchronized void setTokenInfo(long ts, JsonNode tokenInfo) {
-        this.mainToken = tokenInfo.get("token").asText();
-        this.refreshToken = tokenInfo.get("refreshToken").asText();
-        this.mainTokenExpTs = JWT.decode(this.mainToken).getExpiresAtAsInstant().toEpochMilli();
-        this.refreshTokenExpTs = JWT.decode(refreshToken).getExpiresAtAsInstant().toEpochMilli();
-        this.clientServerTimeDiff = JWT.decode(this.mainToken).getIssuedAtAsInstant().toEpochMilli() - ts;
+        tokenManager.setCredentials(username, password);
+        tokenManager.login();
     }
 
     public Optional<AdminSettings> getAdminSettings(String key) {
@@ -509,22 +511,37 @@ public class RestClient implements Closeable {
                 params).getBody();
     }
 
-    public Optional<AlarmSeverity> getHighestAlarmSeverity(EntityId entityId, AlarmSearchStatus searchStatus, AlarmStatus status) {
-        Map<String, String> params = new HashMap<>();
-        params.put("entityType", entityId.getEntityType().name());
-        params.put("entityId", entityId.getId().toString());
-        params.put("searchStatus", searchStatus.name());
-        params.put("status", status.name());
-        try {
-            ResponseEntity<AlarmSeverity> alarmSeverity = restTemplate.getForEntity(baseURL + "/api/alarm/highestSeverity/{entityType}/{entityId}?searchStatus={searchStatus}&status={status}", AlarmSeverity.class, params);
-            return Optional.ofNullable(alarmSeverity.getBody());
-        } catch (HttpClientErrorException exception) {
-            if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
-                return Optional.empty();
-            } else {
-                throw exception;
-            }
-        }
+    /**
+     * Consulta la severidad más alta de las alarmas registradas para una entidad específica.
+     *
+     * Este método llama al endpoint de alarmas filtrando por el tipo e identificador de la entidad,
+     * además del estado de búsqueda (searchStatus) y el estado de la alarma (status).
+     * Si no existen alarmas que cumplan los filtros y el backend responde 404,
+     * se retorna {@code Optional.empty()} en lugar de lanzar una excepción.
+     *
+     * @param entityId     Identificador completo de la entidad (incluye su tipo).
+     * @param searchStatus Estado de búsqueda a filtrar (por ejemplo: ACTIVE, CLEARED).
+     * @param status       Estado de la alarma a filtrar (por ejemplo: ACTIVE_UNACK, ACKED, CLEARED).
+     * @return             {@code Optional<AlarmSeverity>} con la severidad más alta encontrada, o vacío si no hay coincidencias.
+     *
+     * Notas:
+     * - Los filtros se envían como parámetros de consulta.
+     * - Se usa un helper que transforma respuestas 404 en {@code Optional.empty()} para evitar duplicar try/catch.
+     * - Cada invocación realiza una petición HTTP nueva, no hay caché de resultados.
+     */
+    public Optional<AlarmSeverity> getHighestAlarmSeverity(EntityId entityId,
+                                                       AlarmSearchStatus searchStatus,
+                                                       AlarmStatus status) {
+    Map<String, Object> params = new HashMap<>();
+    params.put("entityType", entityId.getEntityType().name());
+    params.put("entityId", entityId.getId().toString());
+    params.put("searchStatus", searchStatus.name());
+    params.put("status", status.name());
+    return getOptional(
+        "/api/alarm/highestSeverity/{entityType}/{entityId}?searchStatus={searchStatus}&status={status}",
+        AlarmSeverity.class,
+        params
+    );
     }
 
     @Deprecated
@@ -533,15 +550,13 @@ public class RestClient implements Closeable {
     }
 
     public PageData<EntitySubtype> getAlarmTypes(PageLink pageLink) {
-        Map<String, String> params = new HashMap<>();
-        addPageLinkToParam(params, pageLink);
+        String url = buildUrlWithPage("/api/alarm/types", pageLink);
         return restTemplate.exchange(
-                baseURL + "/api/alarm/types?" + getUrlParams(pageLink),
+                url,
                 HttpMethod.GET,
                 HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<EntitySubtype>>() {
-                },
-                params).getBody();
+                new ParameterizedTypeReference<PageData<EntitySubtype>>() {}
+        ).getBody();
     }
 
     public AlarmComment saveAlarmComment(AlarmId alarmId, AlarmComment alarmComment) {
@@ -554,43 +569,30 @@ public class RestClient implements Closeable {
     }
 
     public PageData<AlarmCommentInfo> getAlarmComments(AlarmId alarmId, PageLink pageLink) {
-        Map<String, String> params = new HashMap<>();
-        params.put("alarmId", alarmId.getId().toString());
-        addPageLinkToParam(params, pageLink);
-        return restTemplate.exchange(
-                baseURL + "/api/alarm/{alarmId}/comment?" + getUrlParams(pageLink),
-                HttpMethod.GET,
-                HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<AlarmCommentInfo>>() {
-                },
-                params).getBody();
+    Map<String, String> pathVars = new HashMap<>();
+    pathVars.put("alarmId", alarmId.getId().toString());
+
+    // Construimos la URL con los valores reales del PageLink
+    String url = buildUrlWithPage("/api/alarm/{alarmId}/comment", pageLink);
+
+    return restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            HttpEntity.EMPTY,
+            new ParameterizedTypeReference<PageData<AlarmCommentInfo>>() {},
+            pathVars
+    ).getBody();
     }
 
     public Optional<Asset> getAssetById(AssetId assetId) {
-        try {
-            ResponseEntity<Asset> asset = restTemplate.getForEntity(baseURL + "/api/asset/{assetId}", Asset.class, assetId.getId());
-            return Optional.ofNullable(asset.getBody());
-        } catch (HttpClientErrorException exception) {
-            if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
-                return Optional.empty();
-            } else {
-                throw exception;
-            }
-        }
+    return getOptional("/api/asset/{assetId}", Asset.class, assetId.getId());
     }
 
+
     public Optional<AssetInfo> getAssetInfoById(AssetId assetId) {
-        try {
-            ResponseEntity<AssetInfo> asset = restTemplate.getForEntity(baseURL + "/api/asset/info/{assetId}", AssetInfo.class, assetId.getId());
-            return Optional.ofNullable(asset.getBody());
-        } catch (HttpClientErrorException exception) {
-            if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
-                return Optional.empty();
-            } else {
-                throw exception;
-            }
-        }
+    return getOptional("/api/asset/info/{assetId}", AssetInfo.class, assetId.getId());
     }
+
 
     public Asset saveAsset(Asset asset) {
         return restTemplate.postForEntity(baseURL + "/api/asset", asset, Asset.class).getBody();
@@ -644,78 +646,100 @@ public class RestClient implements Closeable {
     }
 
     public PageData<Asset> getTenantAssets(PageLink pageLink, String assetType) {
-        Map<String, String> params = new HashMap<>();
-        params.put("type", assetType);
-        addPageLinkToParam(params, pageLink);
+        Map<String, Object> query = new HashMap<>();
+        query.put("type", assetType);
+        // añadimos los params de paginación a la query
+        Map<String, String> pag = new HashMap<>();
+        addPageLinkToParam(pag, pageLink);
+        query.putAll(pag);
 
-        ResponseEntity<PageData<Asset>> assets = restTemplate.exchange(
-                baseURL + "/api/tenant/assets?type={type}&" + getUrlParams(pageLink),
-                HttpMethod.GET, HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<Asset>>() {
-                },
-                params);
-        return assets.getBody();
+        String url = buildUrl("/api/tenant/assets", query);
+        return restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                new ParameterizedTypeReference<PageData<Asset>>() {}
+        ).getBody();
     }
 
     public PageData<AssetInfo> getTenantAssetInfos(String type, AssetProfileId assetProfileId, PageLink pageLink) {
-        Map<String, String> params = new HashMap<>();
-        params.put("type", type);
-        params.put("assetProfileId", assetProfileId != null ? assetProfileId.toString() : null);
-        addPageLinkToParam(params, pageLink);
-
-        ResponseEntity<PageData<AssetInfo>> assets = restTemplate.exchange(
-                baseURL + "/api/tenant/assetInfos?type={type}&assetProfileId={assetProfileId}&" + getUrlParams(pageLink),
-                HttpMethod.GET, HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<AssetInfo>>() {
-                },
-                params);
-        return assets.getBody();
-    }
-
-    public Optional<Asset> getTenantAsset(String assetName) {
-        try {
-            ResponseEntity<Asset> asset = restTemplate.getForEntity(baseURL + "/api/tenant/assets?assetName={assetName}", Asset.class, assetName);
-            return Optional.ofNullable(asset.getBody());
-        } catch (HttpClientErrorException exception) {
-            if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
-                return Optional.empty();
-            } else {
-                throw exception;
-            }
+        Map<String, Object> query = new HashMap<>();
+        query.put("type", type);
+        if (assetProfileId != null) {
+            query.put("assetProfileId", assetProfileId.toString());
         }
-    }
+        Map<String, String> pag = new HashMap<>();
+        addPageLinkToParam(pag, pageLink);
+        query.putAll(pag);
 
-    public PageData<Asset> getCustomerAssets(CustomerId customerId, PageLink pageLink, String assetType) {
-        Map<String, String> params = new HashMap<>();
-        params.put("customerId", customerId.getId().toString());
-        params.put("type", assetType);
-        addPageLinkToParam(params, pageLink);
-
-        ResponseEntity<PageData<Asset>> assets = restTemplate.exchange(
-                baseURL + "/api/customer/{customerId}/assets?type={type}&" + getUrlParams(pageLink),
+        String url = buildUrl("/api/tenant/assetInfos", query);
+        return restTemplate.exchange(
+                url,
                 HttpMethod.GET,
                 HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<Asset>>() {
-                },
-                params);
-        return assets.getBody();
+                new ParameterizedTypeReference<PageData<AssetInfo>>() {}
+        ).getBody();
+    }
+
+
+    public Optional<Asset> getTenantAsset(String assetName) {
+    return getOptional("/api/tenant/assets?assetName={assetName}", Asset.class, assetName);
+    }
+
+    /**
+     * Obtiene la lista de assets pertenecientes a un cliente, con soporte de paginación y filtrado por tipo.
+     *
+     * Este método construye la URL combinando el ID del cliente como parte de la ruta
+     * y los parámetros de paginación generados desde {@link PageLink}, junto con el filtro {@code type}.
+     * Devuelve los resultados en un contenedor paginado que incluye tanto los datos como los metadatos de la página.
+     *
+     * @param customerId  Identificador del cliente propietario de los assets.
+     * @param pageLink    Parámetros de paginación y búsqueda (limit, textSearch, idOffset, etc.).
+     * @param assetType   Tipo de asset a filtrar; debe evitarse pasar valores nulos o vacíos.
+     * @return            Una página de {@code Asset} con la lista de resultados y datos de paginación (hasNext, totalElements, etc.).
+     *
+     * Notas:
+     * - La URL se construye con {@code buildUrl(...)} para asegurar el encoding correcto de la query.
+     * - Los parámetros de paginación se añaden mediante {@code addPageLinkToParam}, manteniendo coherencia con otros endpoints.
+     * - Si {@code assetType} no es válido, el backend puede devolver una lista vacía o responder con error 4xx.
+     */
+    public PageData<Asset> getCustomerAssets(CustomerId customerId, PageLink pageLink, String assetType) {
+        Map<String, Object> pathVars = Map.of("customerId", customerId.getId().toString());
+
+        Map<String, Object> query = new HashMap<>();
+        query.put("type", assetType);
+        Map<String, String> pag = new HashMap<>();
+        addPageLinkToParam(pag, pageLink);
+        query.putAll(pag);
+
+        String url = buildUrl("/api/customer/{customerId}/assets", query);
+        return restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                new ParameterizedTypeReference<PageData<Asset>>() {},
+                pathVars
+        ).getBody();
     }
 
     public PageData<AssetInfo> getCustomerAssetInfos(CustomerId customerId, String assetType, AssetProfileId assetProfileId, PageLink pageLink) {
-        Map<String, String> params = new HashMap<>();
-        params.put("customerId", customerId.getId().toString());
-        params.put("type", assetType);
-        params.put("assetProfileId", assetProfileId != null ? assetProfileId.toString() : null);
-        addPageLinkToParam(params, pageLink);
+        Map<String, Object> pathVars = Map.of("customerId", customerId.getId().toString());
 
-        ResponseEntity<PageData<AssetInfo>> assets = restTemplate.exchange(
-                baseURL + "/api/customer/{customerId}/assetInfos?type={type}&assetProfileId={assetProfileId}&" + getUrlParams(pageLink),
+        Map<String, Object> query = new HashMap<>();
+        query.put("type", assetType);
+        if (assetProfileId != null) query.put("assetProfileId", assetProfileId.toString());
+        Map<String, String> pag = new HashMap<>();
+        addPageLinkToParam(pag, pageLink);
+        query.putAll(pag);
+
+        String url = buildUrl("/api/customer/{customerId}/assetInfos", query);
+        return restTemplate.exchange(
+                url,
                 HttpMethod.GET,
                 HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<AssetInfo>>() {
-                },
-                params);
-        return assets.getBody();
+                new ParameterizedTypeReference<PageData<AssetInfo>>() {},
+                pathVars
+        ).getBody();
     }
 
     public List<Asset> getAssetsByIds(List<AssetId> assetIds) {
@@ -834,20 +858,24 @@ public class RestClient implements Closeable {
     }
 
     public PageData<AuditLog> getAuditLogsByEntityId(EntityId entityId, List<ActionType> actionTypes, TimePageLink pageLink) {
-        Map<String, String> params = new HashMap<>();
-        params.put("entityType", entityId.getEntityType().name());
-        params.put("entityId", entityId.getId().toString());
-        params.put("actionTypes", listEnumToString(actionTypes));
-        addTimePageLinkToParam(params, pageLink);
+        Map<String, Object> pathVars = new HashMap<>();
+        pathVars.put("entityType", entityId.getEntityType().name());
+        pathVars.put("entityId", entityId.getId().toString());
 
-        ResponseEntity<PageData<AuditLog>> auditLog = restTemplate.exchange(
-                baseURL + "/api/audit/logs/entity/{entityType}/{entityId}?actionTypes={actionTypes}&" + getTimeUrlParams(pageLink),
+        Map<String, Object> query = new HashMap<>();
+        query.put("actionTypes", listEnumToString(actionTypes));
+        Map<String, String> time = new HashMap<>();
+        addTimePageLinkToParam(time, pageLink);
+        query.putAll(time);
+
+        String url = buildUrl("/api/audit/logs/entity/{entityType}/{entityId}", query);
+        return restTemplate.exchange(
+                url,    
                 HttpMethod.GET,
                 HttpEntity.EMPTY,
-                new ParameterizedTypeReference<PageData<AuditLog>>() {
-                },
-                params);
-        return auditLog.getBody();
+                new ParameterizedTypeReference<PageData<AuditLog>>() {},
+                pathVars
+        ).getBody();
     }
 
     public PageData<AuditLog> getAuditLogs(TimePageLink pageLink, List<ActionType> actionTypes) {
@@ -887,17 +915,9 @@ public class RestClient implements Closeable {
     }
 
     public Optional<UserPasswordPolicy> getUserPasswordPolicy() {
-        try {
-            ResponseEntity<UserPasswordPolicy> userPasswordPolicy = restTemplate.getForEntity(baseURL + "/api/noauth/userPasswordPolicy", UserPasswordPolicy.class);
-            return Optional.ofNullable(userPasswordPolicy.getBody());
-        } catch (HttpClientErrorException exception) {
-            if (exception.getStatusCode() == HttpStatus.NOT_FOUND) {
-                return Optional.empty();
-            } else {
-                throw exception;
-            }
-        }
+    return getOptional("/api/noauth/userPasswordPolicy", UserPasswordPolicy.class);
     }
+
 
     public ResponseEntity<String> checkActivateToken(UserId userId) {
         String activateToken = getActivateToken(userId);
@@ -4240,7 +4260,7 @@ public class RestClient implements Closeable {
         return listToString(list.stream().map(id -> id.getId().toString()).collect(Collectors.toList()));
     }
 
-    private String listEnumToString(List<? extends Enum> list) {
+    private <E extends Enum<E>> String listEnumToString(List<E> list) {
         return listToString(list.stream().map(Enum::name).collect(Collectors.toList()));
     }
 

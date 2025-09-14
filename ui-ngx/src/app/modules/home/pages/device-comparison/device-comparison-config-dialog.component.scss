@@ -1,0 +1,19 @@
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.dialog-actions-end {
+  display: flex;
+  justify-content: flex-end;
+}

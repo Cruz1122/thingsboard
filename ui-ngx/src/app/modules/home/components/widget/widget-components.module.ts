@@ -45,6 +45,7 @@ import { WIDGET_COMPONENTS_MODULE_TOKEN } from '@home/components/tokens';
 import { FlotWidgetComponent } from '@home/components/widget/lib/flot-widget.component';
 import { LegendComponent } from '@home/components/widget/lib/legend.component';
 import { ValueCardWidgetComponent } from '@home/components/widget/lib/cards/value-card-widget.component';
+import { DeviceComparisonWidgetComponent } from '@home/components/widget/lib/comparison/device-comparison-widget.component';
 import {
   AggregatedValueCardWidgetComponent
 } from '@home/components/widget/lib/cards/aggregated-value-card-widget.component';
@@ -118,6 +119,7 @@ import { MapTimelinePanelComponent } from '@home/components/widget/lib/maps/pane
     LegendComponent,
     FlotWidgetComponent,
     ValueCardWidgetComponent,
+    DeviceComparisonWidgetComponent,
     AggregatedValueCardWidgetComponent,
     CountWidgetComponent,
     BatteryLevelWidgetComponent,

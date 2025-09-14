@@ -1,0 +1,282 @@
+<!--
+  ~ Copyright © 2016-2025 The Thingsboard Authors
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<div class="tb-device-comparison-widget" #comparisonPanel [ngStyle]="backgroundStyle$ | async">
+  
+  <!-- Header con búsqueda y controles -->
+  <div class="comparison-header" *ngIf="settings.enableDeviceSearch || settings.enableExport">
+    
+    <!-- Buscador -->
+    <div class="search-container" *ngIf="settings.enableDeviceSearch">
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-label>{{ 'widgets.device-comparison.search-placeholder' | translate }}</mat-label>
+        <input matInput #searchInput (input)="onSearchChange()" 
+               [placeholder]="'widgets.device-comparison.search-placeholder' | translate">
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+    </div>
+    
+    <!-- Controles -->
+    <div class="controls-container">
+      <!-- Botón de exportación -->
+      <button mat-icon-button *ngIf="settings.enableExport" 
+              (click)="exportData()" 
+              [title]="'widgets.device-comparison.export' | translate">
+        <mat-icon>file_download</mat-icon>
+      </button>
+      
+      <!-- Indicador de auto-refresh -->
+      <mat-icon *ngIf="settings.autoRefresh" 
+                class="refresh-indicator" 
+                [title]="'widgets.device-comparison.auto-refresh' | translate">
+        sync
+      </mat-icon>
+    </div>
+  </div>
+  
+  <!-- Loading indicator -->
+  <div class="loading-container" *ngIf="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <span>{{ 'widgets.device-comparison.loading' | translate }}</span>
+  </div>
+  
+  <!-- Error message -->
+  <div class="error-container" *ngIf="error">
+    <mat-icon color="warn">error</mat-icon>
+    <span>{{ error }}</span>
+  </div>
+  
+  <!-- Contenido principal -->
+  <div class="comparison-content" *ngIf="!loading && !error">
+    
+    <!-- Vista Grid -->
+    <div class="grid-layout" *ngIf="settings.layout === ComparisonLayout.grid">
+      <div class="device-card" 
+           *ngFor="let device of filteredDevices; trackBy: trackByDeviceId"
+           [ngClass]="{'offline': !device.isOnline, 'outlier': device.isOutlier}">
+        
+        <!-- Header del dispositivo -->
+        <div class="device-header">
+          <div class="device-info">
+            <mat-icon *ngIf="settings.showDeviceIcons" 
+                      class="device-icon"
+                      [style.color]="getDeviceStatusColor(device)">
+              {{ getDeviceIcon(device) }}
+            </mat-icon>
+            <div class="device-names">
+              <span class="device-name" [ngStyle]="headerStyle">{{ device.deviceName }}</span>
+              <span class="device-type" [ngStyle]="labelStyle">{{ device.deviceType }}</span>
+            </div>
+          </div>
+          
+          <!-- Ranking badge -->
+          <div class="ranking-badge" *ngIf="settings.enableRanking && settings.showRankingBadges">
+            <span class="rank-number">#{{ device.rank }}</span>
+            <span class="rank-score">{{ device.score | number:'1.1-1' }}</span>
+          </div>
+        </div>
+        
+        <!-- Estado del dispositivo -->
+        <div class="device-status">
+          <div class="status-indicator" 
+               [ngClass]="{'online': device.isOnline, 'offline': !device.isOnline}"
+               [style.background-color]="getDeviceStatusColor(device)">
+          </div>
+          <span class="status-text" [ngStyle]="labelStyle">
+            {{ device.isOnline ? ('widgets.device-comparison.online' | translate) : ('widgets.device-comparison.offline' | translate) }}
+          </span>
+        </div>
+        
+        <!-- Métricas -->
+        <div class="device-metrics">
+          <div class="metric-item" 
+               *ngFor="let metric of settings.metrics" 
+               [class.metric-enabled]="metric.enabled">
+            <div class="metric-label" [ngStyle]="labelStyle">{{ metric.label }}</div>
+            <div class="metric-value" [ngStyle]="valueStyle">
+              <span *ngIf="device.metrics[metric.key] !== undefined; else noData">
+                {{ device.metrics[metric.key] | number:metric.format }}
+                <span class="metric-unit">{{ metric.unit }}</span>
+              </span>
+              <ng-template #noData>
+                <span class="no-data">N/A</span>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Alertas -->
+        <div class="device-alerts" *ngIf="settings.showAlertIndicators && device.alerts.length > 0">
+          <div class="alert-item" 
+               *ngFor="let alert of device.alerts; let i = index"
+               [ngClass]="'alert-' + alert.level"
+               [style.border-left-color]="getAlertColor(alert.level)">
+            <mat-icon [style.color]="getAlertColor(alert.level)">
+              {{ alert.level === AlertLevel.error ? 'error' : (alert.level === AlertLevel.warning ? 'warning' : 'info') }}
+            </mat-icon>
+            <span class="alert-message">{{ alert.message }}</span>
+          </div>
+        </div>
+        
+        <!-- Última actualización -->
+        <div class="last-update" [ngStyle]="labelStyle">
+          {{ 'widgets.device-comparison.last-update' | translate }}: 
+          {{ device.lastSeen | date:'short' }}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Vista Lista -->
+    <div class="list-layout" *ngIf="settings.layout === ComparisonLayout.list">
+      <div class="device-list-item" 
+           *ngFor="let device of filteredDevices; trackBy: trackByDeviceId"
+           [ngClass]="{'offline': !device.isOnline, 'outlier': device.isOutlier}">
+        
+        <div class="list-item-left">
+          <mat-icon *ngIf="settings.showDeviceIcons" 
+                    class="device-icon"
+                    [style.color]="getDeviceStatusColor(device)">
+            {{ getDeviceIcon(device) }}
+          </mat-icon>
+          
+          <div class="device-info">
+            <div class="device-name" [ngStyle]="headerStyle">{{ device.deviceName }}</div>
+            <div class="device-details" [ngStyle]="labelStyle">
+              {{ device.deviceType }} • 
+              {{ device.isOnline ? ('widgets.device-comparison.online' | translate) : ('widgets.device-comparison.offline' | translate) }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="list-item-center">
+          <div class="metrics-horizontal">
+            <div class="metric-chip" 
+                 *ngFor="let metric of settings.metrics.slice(0, 3)" 
+                 [class.metric-enabled]="metric.enabled">
+              <span class="metric-label">{{ metric.label }}</span>
+              <span class="metric-value" *ngIf="device.metrics[metric.key] !== undefined; else noDataChip">
+                {{ device.metrics[metric.key] | number:metric.format }}{{ metric.unit }}
+              </span>
+              <ng-template #noDataChip>
+                <span class="no-data">N/A</span>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+        
+        <div class="list-item-right">
+          <div class="ranking-info" *ngIf="settings.enableRanking">
+            <div class="rank-number">#{{ device.rank }}</div>
+            <div class="rank-score">{{ device.score | number:'1.1-1' }}</div>
+          </div>
+          
+          <div class="alert-count" *ngIf="device.alerts.length > 0">
+            <mat-icon [style.color]="getAlertColor(device.alerts[0].level)">notifications</mat-icon>
+            <span>{{ device.alerts.length }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Vista Tabla -->
+    <div class="table-layout" *ngIf="settings.layout === ComparisonLayout.table">
+      <table class="devices-table" mat-table [dataSource]="filteredDevices">
+        
+        <!-- Columna de Ranking -->
+        <ng-container matColumnDef="rank" *ngIf="settings.enableRanking">
+          <th mat-header-cell *matHeaderCellDef>{{ 'widgets.device-comparison.rank' | translate }}</th>
+          <td mat-cell *matCellDef="let device">
+            <div class="rank-cell">
+              <span class="rank-number">#{{ device.rank }}</span>
+              <span class="rank-score">({{ device.score | number:'1.1-1' }})</span>
+            </div>
+          </td>
+        </ng-container>
+        
+        <!-- Columna de Dispositivo -->
+        <ng-container matColumnDef="device">
+          <th mat-header-cell *matHeaderCellDef>{{ 'widgets.device-comparison.device' | translate }}</th>
+          <td mat-cell *matCellDef="let device">
+            <div class="device-cell">
+              <mat-icon *ngIf="settings.showDeviceIcons" 
+                        [style.color]="getDeviceStatusColor(device)">
+                {{ getDeviceIcon(device) }}
+              </mat-icon>
+              <div class="device-info">
+                <div class="device-name">{{ device.deviceName }}</div>
+                <div class="device-type">{{ device.deviceType }}</div>
+              </div>
+            </div>
+          </td>
+        </ng-container>
+        
+        <!-- Columna de Estado -->
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ 'widgets.device-comparison.status' | translate }}</th>
+          <td mat-cell *matCellDef="let device">
+            <div class="status-cell">
+              <div class="status-indicator" 
+                   [style.background-color]="getDeviceStatusColor(device)">
+              </div>
+              {{ device.isOnline ? ('widgets.device-comparison.online' | translate) : ('widgets.device-comparison.offline' | translate) }}
+            </div>
+          </td>
+        </ng-container>
+        
+        <!-- Columnas de Métricas -->
+        <ng-container *ngFor="let metric of settings.metrics" [matColumnDef]="metric.key">
+          <th mat-header-cell *matHeaderCellDef>{{ metric.label }}</th>
+          <td mat-cell *matCellDef="let device">
+            <span *ngIf="device.metrics[metric.key] !== undefined; else noDataTable">
+              {{ device.metrics[metric.key] | number:metric.format }}
+              <span class="unit">{{ metric.unit }}</span>
+            </span>
+            <ng-template #noDataTable>
+              <span class="no-data">N/A</span>
+            </ng-template>
+          </td>
+        </ng-container>
+        
+        <!-- Columna de Alertas -->
+        <ng-container matColumnDef="alerts">
+          <th mat-header-cell *matHeaderCellDef>{{ 'widgets.device-comparison.alerts' | translate }}</th>
+          <td mat-cell *matCellDef="let device">
+            <div class="alerts-cell" *ngIf="device.alerts.length > 0; else noAlerts">
+              <mat-icon [style.color]="getAlertColor(device.alerts[0].level)">
+                {{ device.alerts[0].level === AlertLevel.error ? 'error' : (device.alerts[0].level === AlertLevel.warning ? 'warning' : 'info') }}
+              </mat-icon>
+              <span>{{ device.alerts.length }}</span>
+            </div>
+            <ng-template #noAlerts>
+              <span class="no-alerts">-</span>
+            </ng-template>
+          </td>
+        </ng-container>
+        
+        <tr mat-header-row *matHeaderRowDef="getDisplayedColumns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: getDisplayedColumns();"
+            [ngClass]="{'offline': !row.isOnline, 'outlier': row.isOutlier}"></tr>
+      </table>
+    </div>
+    
+    <!-- Mensaje cuando no hay dispositivos -->
+    <div class="no-devices" *ngIf="filteredDevices.length === 0">
+      <mat-icon>device_hub</mat-icon>
+      <h3>{{ 'widgets.device-comparison.no-devices' | translate }}</h3>
+      <p>{{ 'widgets.device-comparison.no-devices-message' | translate }}</p>
+    </div>
+  </div>
+</div>

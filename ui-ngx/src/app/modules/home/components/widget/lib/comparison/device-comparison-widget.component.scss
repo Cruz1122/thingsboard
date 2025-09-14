@@ -1,0 +1,581 @@
+/**
+ * Copyright © 2016-2025 The Thingsboard Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.tb-device-comparison-widget {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  
+  // Header
+  .comparison-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+    
+    .search-container {
+      flex: 1;
+      max-width: 300px;
+      
+      .search-field {
+        width: 100%;
+        font-size: 14px;
+        
+        ::ng-deep .mat-form-field-infix {
+          padding: 8px 0;
+        }
+      }
+    }
+    
+    .controls-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      
+      .refresh-indicator {
+        color: #4CAF50;
+        animation: spin 2s linear infinite;
+      }
+    }
+  }
+  
+  // Loading y Error
+  .loading-container,
+  .error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    gap: 16px;
+    
+    mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+    }
+  }
+  
+  // Contenido principal
+  .comparison-content {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+  }
+  
+  // Vista Grid
+  .grid-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    
+    .device-card {
+      background: white;
+      border-radius: 8px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      padding: 16px;
+      transition: all 0.3s ease;
+      position: relative;
+      
+      &:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
+      }
+      
+      &.offline {
+        opacity: 0.7;
+        border-left: 4px solid #9E9E9E;
+      }
+      
+      &.outlier {
+        border-left: 4px solid #E91E63;
+        background: rgba(233, 30, 99, 0.05);
+      }
+      
+      .device-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        
+        .device-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+          
+          .device-icon {
+            font-size: 24px;
+            width: 24px;
+            height: 24px;
+          }
+          
+          .device-names {
+            display: flex;
+            flex-direction: column;
+            
+            .device-name {
+              font-weight: 500;
+              margin-bottom: 4px;
+            }
+            
+            .device-type {
+              color: rgba(0, 0, 0, 0.6);
+              font-size: 12px;
+            }
+          }
+        }
+        
+        .ranking-badge {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          background: #f5f5f5;
+          padding: 8px;
+          border-radius: 4px;
+          min-width: 50px;
+          
+          .rank-number {
+            font-weight: bold;
+            font-size: 16px;
+            color: #5469FF;
+          }
+          
+          .rank-score {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.6);
+          }
+        }
+      }
+      
+      .device-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        
+        .status-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          
+          &.online {
+            background-color: #4CAF50;
+          }
+          
+          &.offline {
+            background-color: #9E9E9E;
+          }
+        }
+        
+        .status-text {
+          font-size: 14px;
+        }
+      }
+      
+      .device-metrics {
+        margin-bottom: 16px;
+        
+        .metric-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 8px 0;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+          
+          &:last-child {
+            border-bottom: none;
+          }
+          
+          &.metric-enabled {
+            opacity: 1;
+          }
+          
+          &:not(.metric-enabled) {
+            opacity: 0.5;
+          }
+          
+          .metric-label {
+            font-size: 14px;
+            color: rgba(0, 0, 0, 0.7);
+          }
+          
+          .metric-value {
+            font-weight: 500;
+            
+            .metric-unit {
+              font-size: 12px;
+              color: rgba(0, 0, 0, 0.6);
+              margin-left: 4px;
+            }
+            
+            .no-data {
+              color: rgba(0, 0, 0, 0.4);
+              font-style: italic;
+            }
+          }
+        }
+      }
+      
+      .device-alerts {
+        margin-bottom: 12px;
+        
+        .alert-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 8px;
+          margin: 4px 0;
+          border-radius: 4px;
+          border-left: 3px solid;
+          font-size: 12px;
+          
+          &.alert-error {
+            background: rgba(244, 67, 54, 0.1);
+            border-left-color: #F44336;
+          }
+          
+          &.alert-warning {
+            background: rgba(255, 152, 0, 0.1);
+            border-left-color: #FF9800;
+          }
+          
+          &.alert-info {
+            background: rgba(84, 105, 255, 0.1);
+            border-left-color: #5469FF;
+          }
+          
+          mat-icon {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+          }
+          
+          .alert-message {
+            flex: 1;
+          }
+        }
+      }
+      
+      .last-update {
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.5);
+        text-align: right;
+      }
+    }
+  }
+  
+  // Vista Lista
+  .list-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    
+    .device-list-item {
+      display: flex;
+      align-items: center;
+      background: white;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 8px;
+      padding: 16px;
+      transition: all 0.3s ease;
+      
+      &:hover {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+      }
+      
+      &.offline {
+        opacity: 0.7;
+        border-left: 4px solid #9E9E9E;
+      }
+      
+      &.outlier {
+        border-left: 4px solid #E91E63;
+        background: rgba(233, 30, 99, 0.05);
+      }
+      
+      .list-item-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 200px;
+        
+        .device-icon {
+          font-size: 24px;
+          width: 24px;
+          height: 24px;
+        }
+        
+        .device-info {
+          .device-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+          }
+          
+          .device-details {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.6);
+          }
+        }
+      }
+      
+      .list-item-center {
+        flex: 1;
+        padding: 0 16px;
+        
+        .metrics-horizontal {
+          display: flex;
+          gap: 16px;
+          
+          .metric-chip {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            min-width: 80px;
+            
+            &.metric-enabled {
+              opacity: 1;
+            }
+            
+            &:not(.metric-enabled) {
+              opacity: 0.5;
+            }
+            
+            .metric-label {
+              font-size: 12px;
+              color: rgba(0, 0, 0, 0.6);
+              margin-bottom: 4px;
+            }
+            
+            .metric-value {
+              font-weight: 500;
+              font-size: 14px;
+            }
+            
+            .no-data {
+              color: rgba(0, 0, 0, 0.4);
+              font-style: italic;
+            }
+          }
+        }
+      }
+      
+      .list-item-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        
+        .ranking-info {
+          text-align: center;
+          
+          .rank-number {
+            font-weight: bold;
+            color: #5469FF;
+            display: block;
+          }
+          
+          .rank-score {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.6);
+          }
+        }
+        
+        .alert-count {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          
+          mat-icon {
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+          }
+        }
+      }
+    }
+  }
+  
+  // Vista Tabla
+  .table-layout {
+    .devices-table {
+      width: 100%;
+      background: white;
+      
+      .rank-cell {
+        display: flex;
+        flex-direction: column;
+        
+        .rank-number {
+          font-weight: bold;
+          color: #5469FF;
+        }
+        
+        .rank-score {
+          font-size: 12px;
+          color: rgba(0, 0, 0, 0.6);
+        }
+      }
+      
+      .device-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        
+        mat-icon {
+          font-size: 20px;
+          width: 20px;
+          height: 20px;
+        }
+        
+        .device-info {
+          .device-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+          }
+          
+          .device-type {
+            font-size: 12px;
+            color: rgba(0, 0, 0, 0.6);
+          }
+        }
+      }
+      
+      .status-cell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        
+        .status-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+      }
+      
+      .alerts-cell {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        
+        mat-icon {
+          font-size: 18px;
+          width: 18px;
+          height: 18px;
+        }
+      }
+      
+      .unit {
+        font-size: 12px;
+        color: rgba(0, 0, 0, 0.6);
+        margin-left: 4px;
+      }
+      
+      .no-data,
+      .no-alerts {
+        color: rgba(0, 0, 0, 0.4);
+        font-style: italic;
+      }
+      
+      tr.offline {
+        opacity: 0.7;
+        border-left: 4px solid #9E9E9E;
+      }
+      
+      tr.outlier {
+        border-left: 4px solid #E91E63;
+        background: rgba(233, 30, 99, 0.05);
+      }
+    }
+  }
+  
+  // No devices message
+  .no-devices {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 32px;
+    text-align: center;
+    color: rgba(0, 0, 0, 0.6);
+    
+    mat-icon {
+      font-size: 64px;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      color: rgba(0, 0, 0, 0.3);
+    }
+    
+    h3 {
+      margin: 0 0 8px 0;
+      font-weight: 400;
+    }
+    
+    p {
+      margin: 0;
+      font-size: 14px;
+    }
+  }
+}
+
+// Animaciones
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .tb-device-comparison-widget {
+    .grid-layout {
+      grid-template-columns: 1fr;
+    }
+    
+    .list-layout .device-list-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      
+      .list-item-left,
+      .list-item-center,
+      .list-item-right {
+        width: 100%;
+        padding: 0;
+      }
+      
+      .list-item-center .metrics-horizontal {
+        justify-content: space-between;
+      }
+      
+      .list-item-right {
+        justify-content: space-between;
+      }
+    }
+    
+    .table-layout {
+      overflow-x: auto;
+      
+      .devices-table {
+        min-width: 800px;
+      }
+    }
+  }
+}

@@ -1,0 +1,178 @@
+<!--
+  ~ Copyright © 2016-2025 The Thingsboard Authors
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<section class="tb-widget-config-section" [formGroup]="deviceComparisonWidgetConfigForm">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.data-settings</div>
+  
+  <!-- Max Devices -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.max-devices</div>
+    <mat-form-field appearance="outline" class="flex">
+      <input matInput type="number" min="1" max="50" 
+             formControlName="maxDevices"
+             (ngModelChange)="updateWidgetSettings()"
+             placeholder="{{ 'widgets.device-comparison.max-devices-placeholder' | translate }}">
+    </mat-form-field>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.layout-settings</div>
+  
+  <!-- Layout -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.layout</div>
+    <mat-form-field appearance="outline" class="flex">
+      <mat-select formControlName="layout" (selectionChange)="onLayoutChanged()">
+        <mat-option *ngFor="let layout of comparisonLayouts" [value]="layout">
+          {{ comparisonLayoutTranslationMap.get(layout) | translate }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.refresh-settings</div>
+  
+  <!-- Auto Refresh -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.auto-refresh</div>
+    <mat-checkbox formControlName="autoRefresh" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Refresh Interval -->
+  <div class="tb-form-row" *ngIf="deviceComparisonWidgetConfigForm.get('autoRefresh')?.value">
+    <div class="fixed-title-width" translate>widgets.device-comparison.refresh-interval</div>
+    <mat-form-field appearance="outline" class="flex">
+      <input matInput type="number" min="5" max="3600" 
+             formControlName="refreshInterval"
+             (ngModelChange)="updateWidgetSettings()"
+             placeholder="{{ 'widgets.device-comparison.refresh-interval-placeholder' | translate }}">
+      <span matSuffix translate>widgets.device-comparison.seconds</span>
+    </mat-form-field>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.ranking-settings</div>
+  
+  <!-- Enable Ranking -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-ranking</div>
+    <mat-checkbox formControlName="enableRanking" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Ranking Criteria -->
+  <div class="tb-form-row" *ngIf="deviceComparisonWidgetConfigForm.get('enableRanking')?.value">
+    <div class="fixed-title-width" translate>widgets.device-comparison.ranking-criteria</div>
+    <mat-form-field appearance="outline" class="flex">
+      <mat-select formControlName="rankingCriteria" (selectionChange)="onRankingCriteriaChanged()">
+        <mat-option *ngFor="let criteria of rankingCriterias" [value]="criteria">
+          {{ rankingCriteriaTranslationMap.get(criteria) | translate }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.detection-settings</div>
+  
+  <!-- Enable Outlier Detection -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-outlier-detection</div>
+    <mat-checkbox formControlName="enableOutlierDetection" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Outlier Threshold -->
+  <div class="tb-form-row" *ngIf="deviceComparisonWidgetConfigForm.get('enableOutlierDetection')?.value">
+    <div class="fixed-title-width" translate>widgets.device-comparison.outlier-threshold</div>
+    <mat-form-field appearance="outline" class="flex">
+      <input matInput type="number" min="1" max="5" step="0.1" 
+             formControlName="outlierThreshold"
+             (ngModelChange)="updateWidgetSettings()"
+             placeholder="{{ 'widgets.device-comparison.outlier-threshold-placeholder' | translate }}">
+      <span matSuffix translate>widgets.device-comparison.standard-deviations</span>
+    </mat-form-field>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.alert-settings</div>
+  
+  <!-- Enable Offline Alerts -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-offline-alerts</div>
+    <mat-checkbox formControlName="enableOfflineAlerts" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Offline Threshold -->
+  <div class="tb-form-row" *ngIf="deviceComparisonWidgetConfigForm.get('enableOfflineAlerts')?.value">
+    <div class="fixed-title-width" translate>widgets.device-comparison.offline-threshold</div>
+    <mat-form-field appearance="outline" class="flex">
+      <input matInput type="number" min="1" max="1440" 
+             formControlName="offlineThreshold"
+             (ngModelChange)="updateWidgetSettings()"
+             placeholder="{{ 'widgets.device-comparison.offline-threshold-placeholder' | translate }}">
+      <span matSuffix translate>widgets.device-comparison.minutes</span>
+    </mat-form-field>
+  </div>
+  
+  <!-- Enable Threshold Alerts -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-threshold-alerts</div>
+    <mat-checkbox formControlName="enableThresholdAlerts" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.display-settings</div>
+  
+  <!-- Show Device Icons -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.show-device-icons</div>
+    <mat-checkbox formControlName="showDeviceIcons" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Show Ranking Badges -->
+  <div class="tb-form-row" *ngIf="deviceComparisonWidgetConfigForm.get('enableRanking')?.value">
+    <div class="fixed-title-width" translate>widgets.device-comparison.show-ranking-badges</div>
+    <mat-checkbox formControlName="showRankingBadges" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Show Alert Indicators -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.show-alert-indicators</div>
+    <mat-checkbox formControlName="showAlertIndicators" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+</section>
+
+<section class="tb-widget-config-section">
+  <div class="tb-widget-config-section-title" translate>widgets.device-comparison.interaction-settings</div>
+  
+  <!-- Enable Device Search -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-device-search</div>
+    <mat-checkbox formControlName="enableDeviceSearch" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+  
+  <!-- Enable Export -->
+  <div class="tb-form-row">
+    <div class="fixed-title-width" translate>widgets.device-comparison.enable-export</div>
+    <mat-checkbox formControlName="enableExport" (change)="updateWidgetSettings()"></mat-checkbox>
+  </div>
+</section>

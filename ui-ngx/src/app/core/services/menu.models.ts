@@ -106,7 +106,8 @@ export enum MenuId {
   version_control = 'version_control',
   api_usage = 'api_usage',
   trendz_settings = 'trendz_settings',
-  ai_models = 'ai_models'
+  ai_models = 'ai_models',
+  device_comparison = 'device_comparison'
 }
 
 declare type MenuFilter = (authState: AuthState) => boolean;
@@ -295,6 +296,16 @@ export const menuSectionMap = new Map<MenuId, MenuSection>([
       type: 'link',
       path: '/settings/ai-models',
       icon: 'auto_awesome'
+    }
+  ],
+  [
+    MenuId.device_comparison,
+    {
+      id: MenuId.device_comparison,
+      name: 'device-comparison.device-comparison',
+      type: 'link',
+      path: '/features/device-comparison',
+      icon: 'compare_arrows'
     }
   ],
   [
@@ -823,7 +834,8 @@ const defaultUserMenuMap = new Map<Authority, MenuReference[]>([
         id: MenuId.features,
         pages: [
           {id: MenuId.otaUpdates},
-          {id: MenuId.version_control}
+          {id: MenuId.version_control},
+          {id: MenuId.device_comparison}
         ]
       },
       {
